@@ -562,9 +562,17 @@ WebRtcVoiceEngine::WebRtcVoiceEngine(
   // Set default engine options.
   {
     AudioOptions options;
+#ifndef EXCLUDE_RECORDING_AUDIO_DEVICE
     options.echo_cancellation = rtc::Optional<bool>(true);
+#else
+    options.echo_cancellation = rtc::Optional<bool>(false);
+#endif
     options.auto_gain_control = rtc::Optional<bool>(true);
+#ifndef EXCLUDE_RECORDING_AUDIO_DEVICE
     options.noise_suppression = rtc::Optional<bool>(true);
+#else
+    options.noise_suppression = rtc::Optional<bool>(false);
+#endif
     options.highpass_filter = rtc::Optional<bool>(true);
     options.stereo_swapping = rtc::Optional<bool>(false);
     options.audio_jitter_buffer_max_packets = rtc::Optional<int>(50);
@@ -665,7 +673,7 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
 
   webrtc::VoEAudioProcessing* voep = voe_wrapper_->processing();
 
-  if (options.echo_cancellation) {
+  if (options.echo_cancellation.value_or(false)) {
     // Check if platform supports built-in EC. Currently only supported on
     // Android and in combination with Java based audio layer.
     // TODO(henrika): investigate possibility to support built-in EC also
@@ -762,7 +770,7 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
     options.noise_suppression = intelligibility_enhancer_;
   }
 
-  if (options.noise_suppression) {
+  if (options.noise_suppression.value_or(false)) {
     if (adm()->BuiltInNSIsAvailable()) {
       bool builtin_ns =
           *options.noise_suppression &&
@@ -911,10 +919,12 @@ void WebRtcVoiceEngine::SetDefaultDevices() {
                << ") and speaker to (id=" << out_id << ")";
 
   bool ret = true;
+#ifndef EXCLUDE_RECORDING_AUDIO_DEVICE
   if (voe_wrapper_->hw()->SetRecordingDevice(in_id) == -1) {
     LOG_RTCERR1(SetRecordingDevice, in_id);
     ret = false;
   }
+#endif
   webrtc::AudioProcessing* ap = voe()->base()->audio_processing();
   if (ap) {
     ap->Initialize();

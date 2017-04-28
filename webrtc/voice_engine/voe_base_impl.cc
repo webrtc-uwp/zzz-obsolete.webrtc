@@ -260,6 +260,7 @@ int VoEBaseImpl::Init(
                           "Init() failed to initialize the speaker");
   }
 
+#ifndef EXCLUDE_RECORDING_AUDIO_DEVICE
   // Initialize the default microphone
   if (shared_->audio_device()->SetRecordingDevice(
           WEBRTC_VOICE_ENGINE_DEFAULT_DEVICE) != 0) {
@@ -270,6 +271,7 @@ int VoEBaseImpl::Init(
     shared_->SetLastError(VE_CANNOT_ACCESS_MIC_VOL, kTraceInfo,
                           "Init() failed to initialize the microphone");
   }
+#endif
 
   // Set number of channels
   if (shared_->audio_device()->StereoPlayoutIsAvailable(&available) != 0) {
@@ -281,6 +283,7 @@ int VoEBaseImpl::Init(
                           "Init() failed to set mono/stereo playout mode");
   }
 
+#ifndef EXCLUDE_RECORDING_AUDIO_DEVICE
   // TODO(andrew): These functions don't tell us whether stereo recording
   // is truly available. We simply set the AudioProcessing input to stereo
   // here, because we have to wait until receiving the first frame to
@@ -293,6 +296,7 @@ int VoEBaseImpl::Init(
     shared_->SetLastError(VE_SOUNDCARD_ERROR, kTraceWarning,
                           "Init() failed to set mono/stereo recording mode");
   }
+#endif
 
   if (!audioproc) {
     audioproc = AudioProcessing::Create();

@@ -29,6 +29,8 @@
 #error CPU_X86 and CPU_ARM both defined.
 #endif
 
+#define EXCLUDE_RECORDING_AUDIO_DEVICE
+
 #if !defined(RTC_ARCH_CPU_BIG_ENDIAN) && !defined(RTC_ARCH_CPU_LITTLE_ENDIAN)
 // x86, arm or GCC provided __BYTE_ORDER__ macros
 #if CPU_X86 || CPU_ARM ||  \
