@@ -34,15 +34,15 @@ int32_t AudioDeviceIOS::ResetAudioDevice() {
 
 int16_t AudioDeviceIOS::PlayoutDevices() {
   // TODO(henrika): improve.
-  LOG_F(LS_WARNING) << "Not implemented";
+  LOG_F(LS_WARNING) << "AudioDeviceIOS::PlayoutDevices: Not implemented";
   return (int16_t)1;
 }
 
-int16_t AudioDeviceIOS::RecordingDevices() {
+/*int16_t AudioDeviceIOS::RecordingDevices() {
   // TODO(henrika): improve.
   LOG_F(LS_WARNING) << "Not implemented";
   return (int16_t)1;
-}
+}*/
 
 int32_t AudioDeviceIOS::InitSpeaker() {
   return 0;
@@ -245,16 +245,22 @@ int32_t AudioDeviceIOS::MicrophoneVolumeStepSize(uint16_t& stepSize) const {
 int32_t AudioDeviceIOS::PlayoutDeviceName(uint16_t index,
                                           char name[kAdmMaxDeviceNameSize],
                                           char guid[kAdmMaxGuidSize]) {
-  RTC_NOTREACHED() << "Not implemented";
-  return -1;
+  //RTC_NOTREACHED() << "Not implemented";
+  LOG_F(LS_WARNING) << "AudioDeviceIOS::PlayoutDeviceName:  Not implemented";
+
+  strncpy(name, "default", 7);
+  name[7]='\0';
+  strncpy(guid, "default", 7);
+  guid[7]='\0';
+  return 1;
 }
 
-int32_t AudioDeviceIOS::RecordingDeviceName(uint16_t index,
+/*int32_t AudioDeviceIOS::RecordingDeviceName(uint16_t index,
                                             char name[kAdmMaxDeviceNameSize],
                                             char guid[kAdmMaxGuidSize]) {
   RTC_NOTREACHED() << "Not implemented";
   return -1;
-}
+}*/
 
 int32_t AudioDeviceIOS::SetRecordingDevice(uint16_t index) {
   LOG_F(LS_WARNING) << "Not implemented";

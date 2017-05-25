@@ -161,6 +161,39 @@ int32_t AudioDeviceIOS::Terminate() {
   return 0;
 }
 
+// Device enumeration
+int16_t AudioDeviceIOS::RecordingDevices()
+{
+  return [[AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio] count];
+}
+
+int32_t AudioDeviceIOS::RecordingDeviceName(uint16_t index,
+                                    char name[kAdmMaxDeviceNameSize],
+                                    char guid[kAdmMaxGuidSize])
+{
+  int audioCaptureDeviceNumber = [[AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio] count];
+
+  if (audioCaptureDeviceNumber == 0)
+  {
+    //WEBRTC_TRACE(kTraceError, kTraceAudioDevice, 0, "No devices");
+    return -1;
+  }
+  else if (audioCaptureDeviceNumber < index)
+  {
+    //WEBRTC_TRACE(kTraceError, kTraceAudioDevice, 0, "Invalid device index number");
+    return -1;
+  }
+
+  AVCaptureDevice* captureDevice = [[AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio] objectAtIndex:index];
+
+  strncpy(name, [captureDevice.localizedName UTF8String], captureDevice.localizedName.length);
+  name[captureDevice.localizedName.length] = '\0';
+
+  strncpy(guid, [captureDevice.uniqueID UTF8String], captureDevice.uniqueID.length);
+  guid[captureDevice.uniqueID.length] = '\0';
+
+}
+
 int32_t AudioDeviceIOS::InitPlayout() {
   LOGI() << "InitPlayout";
   RTC_DCHECK(thread_checker_.CalledOnValidThread());
