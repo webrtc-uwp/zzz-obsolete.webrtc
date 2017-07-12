@@ -53,6 +53,10 @@ using namespace Windows::Networking::Connectivity;
 using namespace Windows::Foundation;
 #endif
 
+#if defined (RX64)
+#include <winreg.h>
+#endif
+
 // For all platforms try Firefox.
 #define _TRY_FIREFOX 1
 
@@ -385,7 +389,7 @@ bool EndsWith(const std::string& a, const std::string& b) {
 }
 
 bool GetFirefoxProfilePath(Pathname* path) {
-#if defined(WINRT)
+#if defined(WINRT) || defined(RX64)
   return false;
 #elif defined(WEBRTC_WIN)
   wchar_t w_path[MAX_PATH];

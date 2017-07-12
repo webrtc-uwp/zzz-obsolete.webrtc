@@ -27,6 +27,10 @@
 #include "webrtc/base/constructormagic.h"
 #include "webrtc/base/win32.h"
 
+//#if defined(RX64)
+#include <winreg.h>
+//#endif
+
 namespace rtc {
 
 // maximum sizes registry key and value names

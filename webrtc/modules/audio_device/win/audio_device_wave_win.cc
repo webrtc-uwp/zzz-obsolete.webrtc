@@ -2778,7 +2778,8 @@ int32_t AudioDeviceWindowsWave::GetPlayoutBufferDelay(uint32_t& writtenSamples, 
     // Check if playout buffer is extremely low, or if we haven't been able to
     // exectue our code in more than 40 ms
 
-    time = timeGetTime();
+//  RX64_HACK
+    //time = timeGetTime();
 
     if ((msecInPlayoutBuffer < 20) || (time - _dc_prevtime > 40))
     {

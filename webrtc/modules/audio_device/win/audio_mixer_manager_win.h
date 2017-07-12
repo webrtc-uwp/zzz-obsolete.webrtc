@@ -15,7 +15,7 @@
 #include "webrtc/modules/audio_device/include/audio_device.h"
 #include "webrtc/system_wrappers/include/critical_section_wrapper.h"
 #include <Windows.h>
-#include <mmsystem.h>
+#include <mmeapi.h>
 
 namespace webrtc {
 

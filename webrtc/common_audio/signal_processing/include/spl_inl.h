@@ -19,8 +19,9 @@
 #include <winapifamily.h>
 #endif
 
-#if defined(WINAPI_FAMILY) && (WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
-#include "webrtc/common_audio/signal_processing/include/spl_inl_neon.h"
+//RX64_HACK WINAPI_FAMILY renamed to WINAPI_FAMILY2
+#if defined(WINAPI_FAMILY2) && (WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
+#include "webrtc/common_audio/signal_processing/include/spl_inl_neon2.h"
 #else //defined(WINAPI_FAMILY) && (WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
 
 #include "webrtc/system_wrappers/include/compile_assert_c.h"

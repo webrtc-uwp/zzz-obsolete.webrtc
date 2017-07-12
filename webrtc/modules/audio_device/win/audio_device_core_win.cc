@@ -29,8 +29,8 @@
 
 #include <windows.h>
 #include <comdef.h>
-#include <dmo.h>
-#include <Functiondiscoverykeys_devpkey.h>
+//#include <dmo.h>
+//#include <Functiondiscoverykeys_devpkey.h>
 #include <mmsystem.h>
 #include <strsafe.h>
 #include <uuids.h>

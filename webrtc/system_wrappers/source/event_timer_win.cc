@@ -23,6 +23,11 @@ using namespace Windows::Foundation;
 #define WaitForSingleObject(a, b) WaitForSingleObjectEx(a, b, FALSE)
 #endif
 
+
+//RX64_HACK
+typedef void (CALLBACK TIMECALLBACK)(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
+typedef TIMECALLBACK FAR *LPTIMECALLBACK;
+
 namespace webrtc {
 
 // static
