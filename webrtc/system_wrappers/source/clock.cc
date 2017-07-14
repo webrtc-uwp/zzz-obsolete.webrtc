@@ -19,6 +19,9 @@
 #include <time.h>
 #endif
 
+#if defined(RX64)
+#include <timeapi.h>
+#endif 
 #include "webrtc/base/criticalsection.h"
 #include "webrtc/base/timeutils.h"
 #include "webrtc/system_wrappers/include/rw_lock_wrapper.h"

@@ -10,11 +10,13 @@
 
 #include "webrtc/system_wrappers/source/event_timer_win.h"
 
-#ifndef WINRT
-#include "Mmsystem.h"
-#else
+#ifdef WINRT
 using namespace Windows::System::Threading;
 using namespace Windows::Foundation;
+#elif RX64
+#include <mmiscapi2.h>
+#else //WIN32
+#include "Mmsystem.h"
 #endif
 
 #ifdef WINRT
