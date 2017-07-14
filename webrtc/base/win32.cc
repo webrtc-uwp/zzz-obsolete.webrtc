@@ -388,7 +388,7 @@ bool Utf8ToWindowsFilename(const std::string& utf8, std::wstring* filename) {
   // Replace forward slashes with backslashes
   std::replace(wfilename, wfilename + wlen, L'/', L'\\');
 
-#if defined(WINRT)
+#if defined(WINRT) || defined(RX64)
   // Keep relative paths on WinRT.
   filename->assign(wfilename);
 #else // defined(WINRT)
@@ -426,7 +426,7 @@ bool Utf8ToWindowsFilename(const std::string& utf8, std::wstring* filename) {
   return true;
 }
 
-#if !defined(WINRT)
+#if !defined(WINRT) && !defined(RX64)
 bool GetOsVersion(int* major, int* minor, int* build) {
   OSVERSIONINFO info = {0};
   info.dwOSVersionInfoSize = sizeof(info);

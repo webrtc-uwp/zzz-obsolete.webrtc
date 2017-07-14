@@ -192,436 +192,455 @@ extern "C" {
 
 namespace rtc {
 
-//////////////////////////////////////////////////////////////////////
-// Utility Functions
-//////////////////////////////////////////////////////////////////////
+	//////////////////////////////////////////////////////////////////////
+	// Utility Functions
+	//////////////////////////////////////////////////////////////////////
 
 #if defined(WEBRTC_WIN)
 #ifdef _UNICODE
 
-typedef std::wstring tstring;
-std::string Utf8String(const tstring& str) { return ToUtf8(str); }
+	typedef std::wstring tstring;
+	std::string Utf8String(const tstring& str) { return ToUtf8(str); }
 
 #else  // !_UNICODE
 
-typedef std::string tstring;
-std::string Utf8String(const tstring& str) { return str; }
+	typedef std::string tstring;
+	std::string Utf8String(const tstring& str) { return str; }
 
 #endif  // !_UNICODE
 #endif  // WEBRTC_WIN
 
-bool ProxyItemMatch(const Url<char>& url, char * item, size_t len) {
-  // hostname:443
-  if (char * port = ::strchr(item, ':')) {
-    *port++ = '\0';
-    if (url.port() != atol(port)) {
-      return false;
-    }
-  }
+	bool ProxyItemMatch(const Url<char>& url, char * item, size_t len) {
+		// hostname:443
+		if (char * port = ::strchr(item, ':')) {
+			*port++ = '\0';
+			if (url.port() != atol(port)) {
+				return false;
+			}
+		}
 
-  // A.B.C.D or A.B.C.D/24
-  int a, b, c, d, m;
-  int match = sscanf(item, "%d.%d.%d.%d/%d", &a, &b, &c, &d, &m);
-  if (match >= 4) {
-    uint32_t ip = ((a & 0xFF) << 24) | ((b & 0xFF) << 16) | ((c & 0xFF) << 8) |
-                  (d & 0xFF);
-    if ((match < 5) || (m > 32))
-      m = 32;
-    else if (m < 0)
-      m = 0;
-    uint32_t mask = (m == 0) ? 0 : (~0UL) << (32 - m);
-    SocketAddress addr(url.host(), 0);
-    // TODO: Support IPv6 proxyitems. This code block is IPv4 only anyway.
-    return !addr.IsUnresolvedIP() &&
-        ((addr.ipaddr().v4AddressAsHostOrderInteger() & mask) == (ip & mask));
-  }
+		// A.B.C.D or A.B.C.D/24
+		int a, b, c, d, m;
+		int match = sscanf(item, "%d.%d.%d.%d/%d", &a, &b, &c, &d, &m);
+		if (match >= 4) {
+			uint32_t ip = ((a & 0xFF) << 24) | ((b & 0xFF) << 16) | ((c & 0xFF) << 8) |
+				(d & 0xFF);
+			if ((match < 5) || (m > 32))
+				m = 32;
+			else if (m < 0)
+				m = 0;
+			uint32_t mask = (m == 0) ? 0 : (~0UL) << (32 - m);
+			SocketAddress addr(url.host(), 0);
+			// TODO: Support IPv6 proxyitems. This code block is IPv4 only anyway.
+			return !addr.IsUnresolvedIP() &&
+				((addr.ipaddr().v4AddressAsHostOrderInteger() & mask) == (ip & mask));
+		}
 
-  // .foo.com
-  if (*item == '.') {
-    size_t hostlen = url.host().length();
-    return (hostlen > len)
-        && (stricmp(url.host().c_str() + (hostlen - len), item) == 0);
-  }
+		// .foo.com
+		if (*item == '.') {
+			size_t hostlen = url.host().length();
+			return (hostlen > len)
+				&& (stricmp(url.host().c_str() + (hostlen - len), item) == 0);
+		}
 
-  // localhost or www.*.com
-  if (!string_match(url.host().c_str(), item))
-    return false;
+		// localhost or www.*.com
+		if (!string_match(url.host().c_str(), item))
+			return false;
 
-  return true;
-}
+		return true;
+	}
 
-bool ProxyListMatch(const Url<char>& url, const std::string& proxy_list,
-                    char sep) {
-  const size_t BUFSIZE = 256;
-  char buffer[BUFSIZE];
-  const char* list = proxy_list.c_str();
-  while (*list) {
-    // Remove leading space
-    if (isspace(*list)) {
-      ++list;
-      continue;
-    }
-    // Break on separator
-    size_t len;
-    const char * start = list;
-    if (const char * end = ::strchr(list, sep)) {
-      len = (end - list);
-      list += len + 1;
-    } else {
-      len = strlen(list);
-      list += len;
-    }
-    // Remove trailing space
-    while ((len > 0) && isspace(start[len-1]))
-      --len;
-    // Check for oversized entry
-    if (len >= BUFSIZE)
-      continue;
-    memcpy(buffer, start, len);
-    buffer[len] = 0;
-    if (!ProxyItemMatch(url, buffer, len))
-      continue;
-    return true;
-  }
-  return false;
-}
+	bool ProxyListMatch(const Url<char>& url, const std::string& proxy_list,
+		char sep) {
+		const size_t BUFSIZE = 256;
+		char buffer[BUFSIZE];
+		const char* list = proxy_list.c_str();
+		while (*list) {
+			// Remove leading space
+			if (isspace(*list)) {
+				++list;
+				continue;
+			}
+			// Break on separator
+			size_t len;
+			const char * start = list;
+			if (const char * end = ::strchr(list, sep)) {
+				len = (end - list);
+				list += len + 1;
+			}
+			else {
+				len = strlen(list);
+				list += len;
+			}
+			// Remove trailing space
+			while ((len > 0) && isspace(start[len - 1]))
+				--len;
+			// Check for oversized entry
+			if (len >= BUFSIZE)
+				continue;
+			memcpy(buffer, start, len);
+			buffer[len] = 0;
+			if (!ProxyItemMatch(url, buffer, len))
+				continue;
+			return true;
+		}
+		return false;
+	}
 
-bool Better(ProxyType lhs, const ProxyType rhs) {
-  // PROXY_NONE, PROXY_HTTPS, PROXY_SOCKS5, PROXY_UNKNOWN
-  const int PROXY_VALUE[5] = { 0, 2, 3, 1 };
-  return (PROXY_VALUE[lhs] > PROXY_VALUE[rhs]);
-}
+	bool Better(ProxyType lhs, const ProxyType rhs) {
+		// PROXY_NONE, PROXY_HTTPS, PROXY_SOCKS5, PROXY_UNKNOWN
+		const int PROXY_VALUE[5] = { 0, 2, 3, 1 };
+		return (PROXY_VALUE[lhs] > PROXY_VALUE[rhs]);
+	}
 
-bool ParseProxy(const std::string& saddress, ProxyInfo* proxy) {
-  const size_t kMaxAddressLength = 1024;
-  // Allow semicolon, space, or tab as an address separator
-  const char* const kAddressSeparator = " ;\t";
+	bool ParseProxy(const std::string& saddress, ProxyInfo* proxy) {
+		const size_t kMaxAddressLength = 1024;
+		// Allow semicolon, space, or tab as an address separator
+		const char* const kAddressSeparator = " ;\t";
 
-  ProxyType ptype;
-  std::string host;
-  uint16_t port;
+		ProxyType ptype;
+		std::string host;
+		uint16_t port;
 
-  const char* address = saddress.c_str();
-  while (*address) {
-    size_t len;
-    const char * start = address;
-    if (const char * sep = strchr(address, kAddressSeparator)) {
-      len = (sep - address);
-      address += len + 1;
-      while (*address != '\0' && ::strchr(kAddressSeparator, *address)) {
-        address += 1;
-      }
-    } else {
-      len = strlen(address);
-      address += len;
-    }
+		const char* address = saddress.c_str();
+		while (*address) {
+			size_t len;
+			const char * start = address;
+			if (const char * sep = strchr(address, kAddressSeparator)) {
+				len = (sep - address);
+				address += len + 1;
+				while (*address != '\0' && ::strchr(kAddressSeparator, *address)) {
+					address += 1;
+				}
+			}
+			else {
+				len = strlen(address);
+				address += len;
+			}
 
-    if (len > kMaxAddressLength - 1) {
-      LOG(LS_WARNING) << "Proxy address too long [" << start << "]";
-      continue;
-    }
+			if (len > kMaxAddressLength - 1) {
+				LOG(LS_WARNING) << "Proxy address too long [" << start << "]";
+				continue;
+			}
 
-    char buffer[kMaxAddressLength];
-    memcpy(buffer, start, len);
-    buffer[len] = 0;
+			char buffer[kMaxAddressLength];
+			memcpy(buffer, start, len);
+			buffer[len] = 0;
 
-    char * colon = ::strchr(buffer, ':');
-    if (!colon) {
-      LOG(LS_WARNING) << "Proxy address without port [" << buffer << "]";
-      continue;
-    }
+			char * colon = ::strchr(buffer, ':');
+			if (!colon) {
+				LOG(LS_WARNING) << "Proxy address without port [" << buffer << "]";
+				continue;
+			}
 
-    *colon = 0;
-    char * endptr;
-    port = static_cast<uint16_t>(strtol(colon + 1, &endptr, 0));
-    if (*endptr != 0) {
-      LOG(LS_WARNING) << "Proxy address with invalid port [" << buffer << "]";
-      continue;
-    }
+			*colon = 0;
+			char * endptr;
+			port = static_cast<uint16_t>(strtol(colon + 1, &endptr, 0));
+			if (*endptr != 0) {
+				LOG(LS_WARNING) << "Proxy address with invalid port [" << buffer << "]";
+				continue;
+			}
 
-    if (char * equals = ::strchr(buffer, '=')) {
-      *equals = 0;
-      host = equals + 1;
-      if (_stricmp(buffer, "socks") == 0) {
-        ptype = PROXY_SOCKS5;
-      } else if (_stricmp(buffer, "https") == 0) {
-        ptype = PROXY_HTTPS;
-      } else {
-        LOG(LS_WARNING) << "Proxy address with unknown protocol ["
-                        << buffer << "]";
-        ptype = PROXY_UNKNOWN;
-      }
-    } else {
-      host = buffer;
-      ptype = PROXY_UNKNOWN;
-    }
+			if (char * equals = ::strchr(buffer, '=')) {
+				*equals = 0;
+				host = equals + 1;
+				if (_stricmp(buffer, "socks") == 0) {
+					ptype = PROXY_SOCKS5;
+				}
+				else if (_stricmp(buffer, "https") == 0) {
+					ptype = PROXY_HTTPS;
+				}
+				else {
+					LOG(LS_WARNING) << "Proxy address with unknown protocol ["
+						<< buffer << "]";
+					ptype = PROXY_UNKNOWN;
+				}
+			}
+			else {
+				host = buffer;
+				ptype = PROXY_UNKNOWN;
+			}
 
-    if (Better(ptype, proxy->type)) {
-      proxy->type = ptype;
-      proxy->address.SetIP(host);
-      proxy->address.SetPort(port);
-    }
-  }
+			if (Better(ptype, proxy->type)) {
+				proxy->type = ptype;
+				proxy->address.SetIP(host);
+				proxy->address.SetPort(port);
+			}
+		}
 
-  return proxy->type != PROXY_NONE;
-}
+		return proxy->type != PROXY_NONE;
+	}
 
-UserAgent GetAgent(const char* agent) {
-  if (agent) {
-    std::string agent_str(agent);
-    if (agent_str.find(kFirefoxPattern) != std::string::npos) {
-      return UA_FIREFOX;
-    } else if (agent_str.find(kInternetExplorerPattern) != std::string::npos) {
-      return UA_INTERNETEXPLORER;
-    } else if (agent_str.empty()) {
-      return UA_UNKNOWN;
-    }
-  }
-  return UA_OTHER;
-}
+	UserAgent GetAgent(const char* agent) {
+		if (agent) {
+			std::string agent_str(agent);
+			if (agent_str.find(kFirefoxPattern) != std::string::npos) {
+				return UA_FIREFOX;
+			}
+			else if (agent_str.find(kInternetExplorerPattern) != std::string::npos) {
+				return UA_INTERNETEXPLORER;
+			}
+			else if (agent_str.empty()) {
+				return UA_UNKNOWN;
+			}
+		}
+		return UA_OTHER;
+	}
 
-bool EndsWith(const std::string& a, const std::string& b) {
-  if (b.size() > a.size()) {
-    return false;
-  }
-  int result = a.compare(a.size() - b.size(), b.size(), b);
-  return result == 0;
-}
+	bool EndsWith(const std::string& a, const std::string& b) {
+		if (b.size() > a.size()) {
+			return false;
+		}
+		int result = a.compare(a.size() - b.size(), b.size(), b);
+		return result == 0;
+	}
 
-bool GetFirefoxProfilePath(Pathname* path) {
+	bool GetFirefoxProfilePath(Pathname* path) {
 #if defined(WINRT) || defined(RX64)
-  return false;
+		return false;
 #elif defined(WEBRTC_WIN)
-  wchar_t w_path[MAX_PATH];
-  if (SHGetFolderPath(0, CSIDL_APPDATA, 0, SHGFP_TYPE_CURRENT, w_path) !=
-      S_OK) {
-    LOG(LS_ERROR) << "SHGetFolderPath failed";
-    return false;
-  }
-  path->SetFolder(ToUtf8(w_path, wcslen(w_path)));
-  path->AppendFolder("Mozilla");
-  path->AppendFolder("Firefox");
+		wchar_t w_path[MAX_PATH];
+		if (SHGetFolderPath(0, CSIDL_APPDATA, 0, SHGFP_TYPE_CURRENT, w_path) !=
+			S_OK) {
+			LOG(LS_ERROR) << "SHGetFolderPath failed";
+			return false;
+		}
+		path->SetFolder(ToUtf8(w_path, wcslen(w_path)));
+		path->AppendFolder("Mozilla");
+		path->AppendFolder("Firefox");
 #elif defined(WEBRTC_MAC) && !defined(WEBRTC_IOS)
-  FSRef fr;
-  if (0 != FSFindFolder(kUserDomain, kApplicationSupportFolderType,
-                        kCreateFolder, &fr)) {
-    LOG(LS_ERROR) << "FSFindFolder failed";
-    return false;
-  }
-  char buffer[NAME_MAX + 1];
-  if (0 != FSRefMakePath(&fr, reinterpret_cast<uint8_t*>(buffer),
-                         arraysize(buffer))) {
-    LOG(LS_ERROR) << "FSRefMakePath failed";
-    return false;
-  }
-  path->SetFolder(std::string(buffer));
-  path->AppendFolder("Firefox");
+		FSRef fr;
+		if (0 != FSFindFolder(kUserDomain, kApplicationSupportFolderType,
+			kCreateFolder, &fr)) {
+			LOG(LS_ERROR) << "FSFindFolder failed";
+			return false;
+		}
+		char buffer[NAME_MAX + 1];
+		if (0 != FSRefMakePath(&fr, reinterpret_cast<uint8_t*>(buffer),
+			arraysize(buffer))) {
+			LOG(LS_ERROR) << "FSRefMakePath failed";
+			return false;
+		}
+		path->SetFolder(std::string(buffer));
+		path->AppendFolder("Firefox");
 #else
-  char* user_home = getenv("HOME");
-  if (user_home == NULL) {
-    return false;
-  }
-  path->SetFolder(std::string(user_home));
-  path->AppendFolder(".mozilla");
-  path->AppendFolder("firefox");
+		char* user_home = getenv("HOME");
+		if (user_home == NULL) {
+			return false;
+		}
+		path->SetFolder(std::string(user_home));
+		path->AppendFolder(".mozilla");
+		path->AppendFolder("firefox");
 #endif  // WEBRTC_WIN
-  return true;
-}
+		return true;
+	}
 
-bool GetDefaultFirefoxProfile(Pathname* profile_path) {
-  ASSERT(NULL != profile_path);
-  Pathname path;
-  if (!GetFirefoxProfilePath(&path)) {
-    return false;
-  }
+	bool GetDefaultFirefoxProfile(Pathname* profile_path) {
+		ASSERT(NULL != profile_path);
+		Pathname path;
+		if (!GetFirefoxProfilePath(&path)) {
+			return false;
+		}
 
 #if USE_FIREFOX_PROFILES_INI
-  // [Profile0]
-  // Name=default
-  // IsRelative=1
-  // Path=Profiles/2de53ejb.default
-  // Default=1
+		// [Profile0]
+		// Name=default
+		// IsRelative=1
+		// Path=Profiles/2de53ejb.default
+		// Default=1
 
-  // Note: we are looking for the first entry with "Default=1", or the last
-  // entry in the file
-  path.SetFilename("profiles.ini");
-  std::unique_ptr<FileStream> fs(Filesystem::OpenFile(path, "r"));
-  if (!fs) {
-    return false;
-  }
-  Pathname candidate;
-  bool relative = true;
-  std::string line;
-  while (fs->ReadLine(&line) == SR_SUCCESS) {
-    if (line.length() == 0) {
-      continue;
-    }
-    if (line.at(0) == '[') {
-      relative = true;
-      candidate.clear();
-    } else if (line.find("IsRelative=") == 0 &&
-               line.length() >= 12) {
-      // TODO: The initial Linux public launch revealed a fairly
-      // high number of machines where IsRelative= did not have anything after
-      // it. Perhaps that is legal profiles.ini syntax?
-      relative = (line.at(11) != '0');
-    } else if (line.find("Path=") == 0 &&
-               line.length() >= 6) {
-      if (relative) {
-        candidate = path;
-      } else {
-        candidate.clear();
-      }
-      candidate.AppendFolder(line.substr(5));
-    } else if (line.find("Default=") == 0 &&
-               line.length() >= 9) {
-      if ((line.at(8) != '0') && !candidate.empty()) {
-        break;
-      }
-    }
-  }
-  fs->Close();
-  if (candidate.empty()) {
-    return false;
-  }
-  profile_path->SetPathname(candidate.pathname());
+		// Note: we are looking for the first entry with "Default=1", or the last
+		// entry in the file
+		path.SetFilename("profiles.ini");
+		std::unique_ptr<FileStream> fs(Filesystem::OpenFile(path, "r"));
+		if (!fs) {
+			return false;
+		}
+		Pathname candidate;
+		bool relative = true;
+		std::string line;
+		while (fs->ReadLine(&line) == SR_SUCCESS) {
+			if (line.length() == 0) {
+				continue;
+			}
+			if (line.at(0) == '[') {
+				relative = true;
+				candidate.clear();
+			}
+			else if (line.find("IsRelative=") == 0 &&
+				line.length() >= 12) {
+				// TODO: The initial Linux public launch revealed a fairly
+				// high number of machines where IsRelative= did not have anything after
+				// it. Perhaps that is legal profiles.ini syntax?
+				relative = (line.at(11) != '0');
+			}
+			else if (line.find("Path=") == 0 &&
+				line.length() >= 6) {
+				if (relative) {
+					candidate = path;
+				}
+				else {
+					candidate.clear();
+				}
+				candidate.AppendFolder(line.substr(5));
+			}
+			else if (line.find("Default=") == 0 &&
+				line.length() >= 9) {
+				if ((line.at(8) != '0') && !candidate.empty()) {
+					break;
+				}
+			}
+		}
+		fs->Close();
+		if (candidate.empty()) {
+			return false;
+		}
+		profile_path->SetPathname(candidate.pathname());
 
 #else // !USE_FIREFOX_PROFILES_INI
-  path.AppendFolder("Profiles");
-  DirectoryIterator* it = Filesystem::IterateDirectory();
-  it->Iterate(path);
-  std::string extension(".default");
-  while (!EndsWith(it->Name(), extension)) {
-    if (!it->Next()) {
-      return false;
-    }
-  }
+		path.AppendFolder("Profiles");
+		DirectoryIterator* it = Filesystem::IterateDirectory();
+		it->Iterate(path);
+		std::string extension(".default");
+		while (!EndsWith(it->Name(), extension)) {
+			if (!it->Next()) {
+				return false;
+			}
+		}
 
-  profile_path->SetPathname(path);
-  profile->AppendFolder("Profiles");
-  profile->AppendFolder(it->Name());
-  delete it;
+		profile_path->SetPathname(path);
+		profile->AppendFolder("Profiles");
+		profile->AppendFolder(it->Name());
+		delete it;
 
 #endif // !USE_FIREFOX_PROFILES_INI
 
-  return true;
-}
+		return true;
+	}
 
-bool ReadFirefoxPrefs(const Pathname& filename,
-                      const char * prefix,
-                      StringMap* settings) {
-  std::unique_ptr<FileStream> fs(Filesystem::OpenFile(filename, "r"));
-  if (!fs) {
-    LOG(LS_ERROR) << "Failed to open file: " << filename.pathname();
-    return false;
-  }
+	bool ReadFirefoxPrefs(const Pathname& filename,
+		const char * prefix,
+		StringMap* settings) {
+		std::unique_ptr<FileStream> fs(Filesystem::OpenFile(filename, "r"));
+		if (!fs) {
+			LOG(LS_ERROR) << "Failed to open file: " << filename.pathname();
+			return false;
+		}
 
-  std::string line;
-  while (fs->ReadLine(&line) == SR_SUCCESS) {
-    size_t prefix_len = strlen(prefix);
+		std::string line;
+		while (fs->ReadLine(&line) == SR_SUCCESS) {
+			size_t prefix_len = strlen(prefix);
 
-    // Skip blank lines and too long lines.
-    if ((line.length() == 0) || (line.length() > kMaxLineLength)
-        || (line.at(0) == '#') || line.compare(0, 2, "/*") == 0
-        || line.compare(0, 2, " *") == 0) {
-      continue;
-    }
+			// Skip blank lines and too long lines.
+			if ((line.length() == 0) || (line.length() > kMaxLineLength)
+				|| (line.at(0) == '#') || line.compare(0, 2, "/*") == 0
+				|| line.compare(0, 2, " *") == 0) {
+				continue;
+			}
 
-    char buffer[kMaxLineLength];
-    strcpyn(buffer, sizeof(buffer), line.c_str());
-    int nstart = 0, nend = 0, vstart = 0, vend = 0;
-    sscanf(buffer, "user_pref(\"%n%*[^\"]%n\", %n%*[^)]%n);",
-           &nstart, &nend, &vstart, &vend);
-    if (vend > 0) {
-      char* name = buffer + nstart;
-      name[nend - nstart] = 0;
-      if ((vend - vstart >= 2) && (buffer[vstart] == '"')) {
-        vstart += 1;
-        vend -= 1;
-      }
-      char* value = buffer + vstart;
-      value[vend - vstart] = 0;
-      if ((strncmp(name, prefix, prefix_len) == 0) && *value) {
-        settings->Add(name + prefix_len, value);
-      }
-    } else {
-      LOG_F(LS_WARNING) << "Unparsed pref [" << buffer << "]";
-    }
-  }
-  fs->Close();
-  return true;
-}
+			char buffer[kMaxLineLength];
+			strcpyn(buffer, sizeof(buffer), line.c_str());
+			int nstart = 0, nend = 0, vstart = 0, vend = 0;
+			sscanf(buffer, "user_pref(\"%n%*[^\"]%n\", %n%*[^)]%n);",
+				&nstart, &nend, &vstart, &vend);
+			if (vend > 0) {
+				char* name = buffer + nstart;
+				name[nend - nstart] = 0;
+				if ((vend - vstart >= 2) && (buffer[vstart] == '"')) {
+					vstart += 1;
+					vend -= 1;
+				}
+				char* value = buffer + vstart;
+				value[vend - vstart] = 0;
+				if ((strncmp(name, prefix, prefix_len) == 0) && *value) {
+					settings->Add(name + prefix_len, value);
+				}
+			}
+			else {
+				LOG_F(LS_WARNING) << "Unparsed pref [" << buffer << "]";
+			}
+		}
+		fs->Close();
+		return true;
+	}
 
-bool GetFirefoxProxySettings(const char* url, ProxyInfo* proxy) {
-  Url<char> purl(url);
-  Pathname path;
-  bool success = false;
-  if (GetDefaultFirefoxProfile(&path)) {
-    StringMap settings;
-    path.SetFilename("prefs.js");
-    if (ReadFirefoxPrefs(path, "network.proxy.", &settings)) {
-      success = true;
-      proxy->bypass_list =
-          settings.Get("no_proxies_on", "localhost, 127.0.0.1");
-      if (settings.Get("type") == "1") {
-        // User has manually specified a proxy, try to figure out what
-        // type it is.
-        if (ProxyListMatch(purl, proxy->bypass_list.c_str(), ',')) {
-          // Our url is in the list of url's to bypass proxy.
-        } else if (settings.Get("share_proxy_settings") == "true") {
-          proxy->type = PROXY_UNKNOWN;
-          proxy->address.SetIP(settings.Get("http"));
-          proxy->address.SetPort(atoi(settings.Get("http_port").c_str()));
-        } else if (settings.IsSet("socks")) {
-          proxy->type = PROXY_SOCKS5;
-          proxy->address.SetIP(settings.Get("socks"));
-          proxy->address.SetPort(atoi(settings.Get("socks_port").c_str()));
-        } else if (settings.IsSet("ssl")) {
-          proxy->type = PROXY_HTTPS;
-          proxy->address.SetIP(settings.Get("ssl"));
-          proxy->address.SetPort(atoi(settings.Get("ssl_port").c_str()));
-        } else if (settings.IsSet("http")) {
-          proxy->type = PROXY_HTTPS;
-          proxy->address.SetIP(settings.Get("http"));
-          proxy->address.SetPort(atoi(settings.Get("http_port").c_str()));
-        }
-      } else if (settings.Get("type") == "2") {
-        // Browser is configured to get proxy settings from a given url.
-        proxy->autoconfig_url = settings.Get("autoconfig_url").c_str();
-      } else if (settings.Get("type") == "4") {
-        // Browser is configured to auto detect proxy config.
-        proxy->autodetect = true;
-      } else {
-        // No proxy set.
-      }
-    }
-  }
-  return success;
-}
+	bool GetFirefoxProxySettings(const char* url, ProxyInfo* proxy) {
+		Url<char> purl(url);
+		Pathname path;
+		bool success = false;
+		if (GetDefaultFirefoxProfile(&path)) {
+			StringMap settings;
+			path.SetFilename("prefs.js");
+			if (ReadFirefoxPrefs(path, "network.proxy.", &settings)) {
+				success = true;
+				proxy->bypass_list =
+					settings.Get("no_proxies_on", "localhost, 127.0.0.1");
+				if (settings.Get("type") == "1") {
+					// User has manually specified a proxy, try to figure out what
+					// type it is.
+					if (ProxyListMatch(purl, proxy->bypass_list.c_str(), ',')) {
+						// Our url is in the list of url's to bypass proxy.
+					}
+					else if (settings.Get("share_proxy_settings") == "true") {
+						proxy->type = PROXY_UNKNOWN;
+						proxy->address.SetIP(settings.Get("http"));
+						proxy->address.SetPort(atoi(settings.Get("http_port").c_str()));
+					}
+					else if (settings.IsSet("socks")) {
+						proxy->type = PROXY_SOCKS5;
+						proxy->address.SetIP(settings.Get("socks"));
+						proxy->address.SetPort(atoi(settings.Get("socks_port").c_str()));
+					}
+					else if (settings.IsSet("ssl")) {
+						proxy->type = PROXY_HTTPS;
+						proxy->address.SetIP(settings.Get("ssl"));
+						proxy->address.SetPort(atoi(settings.Get("ssl_port").c_str()));
+					}
+					else if (settings.IsSet("http")) {
+						proxy->type = PROXY_HTTPS;
+						proxy->address.SetIP(settings.Get("http"));
+						proxy->address.SetPort(atoi(settings.Get("http_port").c_str()));
+					}
+				}
+				else if (settings.Get("type") == "2") {
+					// Browser is configured to get proxy settings from a given url.
+					proxy->autoconfig_url = settings.Get("autoconfig_url").c_str();
+				}
+				else if (settings.Get("type") == "4") {
+					// Browser is configured to auto detect proxy config.
+					proxy->autodetect = true;
+				}
+				else {
+					// No proxy set.
+				}
+			}
+		}
+		return success;
+	}
 
 #if defined(WINRT)
-Platform::String^ MkString(const char* str) {
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    std::wstring wstr = converter.from_bytes(str);
-    return ref new Platform::String(wstr.data());
-}
+	Platform::String^ MkString(const char* str) {
+		std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+		std::wstring wstr = converter.from_bytes(str);
+		return ref new Platform::String(wstr.data());
+	}
 
-bool GetWinRTProxySettings(const char* agent, const char* url, ProxyInfo* proxy) {
+	bool GetWinRTProxySettings(const char* agent, const char* url, ProxyInfo* proxy) {
 #if 1
-  return false;
+		return false;
 #else
-  if (proxy == nullptr) {
-    return false;
-  }
-  auto action = NetworkInformation::GetProxyConfigurationAsync(
-    ref new Uri(MkString(url)));
-  auto proxyConfig = Concurrency::create_task(action).get();
-  if (proxyConfig == nullptr) {
-    return false;
-  }
-  // TODO(winrt): populate the proxy object with data from proxyConfig.
+		if (proxy == nullptr) {
+			return false;
+		}
+		auto action = NetworkInformation::GetProxyConfigurationAsync(
+			ref new Uri(MkString(url)));
+		auto proxyConfig = Concurrency::create_task(action).get();
+		if (proxyConfig == nullptr) {
+			return false;
+		}
+		// TODO(winrt): populate the proxy object with data from proxyConfig.
 #endif
-}
+	}
 #elif defined(WEBRTC_WIN)  // Windows specific implementation for reading Internet
               // Explorer proxy settings.
 
@@ -1271,7 +1290,7 @@ bool GetiOSProxySettings(ProxyInfo* proxy) {
 
 bool AutoDetectProxySettings(const char* agent, const char* url,
                              ProxyInfo* proxy) {
-#if defined(WEBRTC_WIN) && !defined(WINRT)
+#if defined(WEBRTC_WIN) && !defined(WINRT) && !defined(RX64)
   return WinHttpAutoDetectProxyForUrl(agent, url, proxy);
 #else
   LOG(LS_WARNING) << "Proxy auto-detection not implemented for this platform";

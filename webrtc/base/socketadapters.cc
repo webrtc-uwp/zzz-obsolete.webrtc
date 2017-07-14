@@ -420,7 +420,7 @@ void AsyncHttpsProxySocket::ProcessLine(char * data, size_t len) {
           );
         //std::string msg("Please report the following information to foo@bar.com:\r\nUnknown methods: ");
         msg.append(unknown_mechanisms_);
-#if defined(WEBRTC_WIN) && !defined(WINRT)
+#if defined(WEBRTC_WIN) && !defined(WINRT) && !defined(RX64)
         MessageBoxA(0, msg.c_str(), "Oops!", MB_OK);
 #endif // #defined(WEBRTC_WIN) && !defined(WINRT)
 #if defined(WEBRTC_POSIX)

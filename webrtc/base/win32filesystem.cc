@@ -27,6 +27,8 @@
 #include <objbase.h>
 #endif // defined(WINRT)
 
+#include <rx64_utility.h>
+
 // In several places in this file, we test the integrity level of the process
 // before calling GetLongPathName. We do this because calling GetLongPathName
 // when running under protected mode IE (a low integrity process) can result in
