@@ -40,6 +40,12 @@
 #include "webrtc/system_wrappers/include/sleep.h"
 #include "webrtc/system_wrappers/include/trace.h"
 
+#ifdef RX64
+#include <mmsyscom.h>
+#include <dmort.h>
+#include <rx64_utility.h>
+#endif
+
 // Macro that calls a COM method returning HRESULT value.
 #define EXIT_ON_ERROR(hres)    do { if (FAILED(hres)) goto Exit; } while(0)
 
