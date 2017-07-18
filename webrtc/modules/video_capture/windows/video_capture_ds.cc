@@ -18,6 +18,10 @@
 
 #include <Dvdmedia.h> // VIDEOINFOHEADER2
 
+#if RX64
+#include <rx64_utility.h>
+#endif
+
 namespace webrtc
 {
 namespace videocapturemodule

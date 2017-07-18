@@ -18,6 +18,10 @@
 #include <Dvdmedia.h>
 #include <Streams.h>
 
+#if RX64
+#include <mfapi.h>
+#endif
+
 namespace webrtc
 {
 namespace videocapturemodule

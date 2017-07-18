@@ -17,6 +17,10 @@
 #define CAPTURE_FILTER_NAME L"VideoCaptureFilter"
 #define SINK_FILTER_NAME L"SinkFilter"
 
+#ifdef RX64
+#include <strmif.h>
+#include <control.h>
+#endif
 namespace webrtc
 {
 namespace videocapturemodule

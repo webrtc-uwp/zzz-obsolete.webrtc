@@ -15,7 +15,10 @@
 #include "webrtc/modules/video_capture/windows/help_functions_ds.h"
 
 #include <cguid.h>
-
+#ifdef RX64
+#include <strmif.h>
+#include <uuids.h>
+#endif
 namespace webrtc
 {
 namespace videocapturemodule

@@ -15,7 +15,9 @@
 #include "webrtc/modules/video_capture/video_capture_impl.h"
 
 #include <Dshow.h>
-
+#if RX64
+#include <strmif.h>
+#endif
 namespace webrtc
 {
 namespace videocapturemodule
