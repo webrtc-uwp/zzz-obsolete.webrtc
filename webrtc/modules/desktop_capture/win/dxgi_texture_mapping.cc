@@ -14,8 +14,8 @@
 #include <DXGI.h>
 #include <DXGI1_2.h>
 
-#include "webrtc/base/checks.h"
-#include "webrtc/system_wrappers/include/logging.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
 
 namespace webrtc {
 
@@ -29,7 +29,8 @@ DxgiTextureMapping::~DxgiTextureMapping() = default;
 bool DxgiTextureMapping::CopyFromTexture(
     const DXGI_OUTDUPL_FRAME_INFO& frame_info,
     ID3D11Texture2D* texture) {
-  RTC_DCHECK(texture && frame_info.AccumulatedFrames > 0);
+  RTC_DCHECK_GT(frame_info.AccumulatedFrames, 0);
+  RTC_DCHECK(texture);
   *rect() = {0};
   _com_error error = duplication_->MapDesktopSurface(rect());
   if (error.Error() != S_OK) {

@@ -11,10 +11,12 @@
 #ifndef WEBRTC_CALL_FLEXFEC_RECEIVE_STREAM_IMPL_H_
 #define WEBRTC_CALL_FLEXFEC_RECEIVE_STREAM_IMPL_H_
 
+#include <atomic>
 #include <memory>
 
-#include "webrtc/base/criticalsection.h"
 #include "webrtc/call/flexfec_receive_stream.h"
+#include "webrtc/call/rtp_packet_sink_interface.h"
+#include "webrtc/rtc_base/criticalsection.h"
 
 namespace webrtc {
 
@@ -25,30 +27,32 @@ class RecoveredPacketReceiver;
 class RtcpRttStats;
 class RtpPacketReceived;
 class RtpRtcp;
+class RtpStreamReceiverControllerInterface;
+class RtpStreamReceiverInterface;
 
 class FlexfecReceiveStreamImpl : public FlexfecReceiveStream {
  public:
-  FlexfecReceiveStreamImpl(const Config& config,
-                           RecoveredPacketReceiver* recovered_packet_receiver,
-                           RtcpRttStats* rtt_stats,
-                           ProcessThread* process_thread);
+  FlexfecReceiveStreamImpl(
+      RtpStreamReceiverControllerInterface* receiver_controller,
+      const Config& config,
+      RecoveredPacketReceiver* recovered_packet_receiver,
+      RtcpRttStats* rtt_stats,
+      ProcessThread* process_thread);
   ~FlexfecReceiveStreamImpl() override;
 
-  const Config& GetConfig() const { return config_; }
-
-  // TODO(nisse): Intended to be part of an RtpPacketReceiver interface.
-  void OnRtpPacket(const RtpPacketReceived& packet);
+  // RtpPacketSinkInterface.
+  void OnRtpPacket(const RtpPacketReceived& packet) override;
 
   // Implements FlexfecReceiveStream.
   void Start() override;
   void Stop() override;
   Stats GetStats() const override;
+  const Config& GetConfig() const override;
 
  private:
   // Config.
   const Config config_;
-  bool started_ GUARDED_BY(crit_);
-  rtc::CriticalSection crit_;
+  std::atomic<bool> started_;
 
   // Erasure code interfacing.
   const std::unique_ptr<FlexfecReceiver> receiver_;
@@ -57,6 +61,8 @@ class FlexfecReceiveStreamImpl : public FlexfecReceiveStream {
   const std::unique_ptr<ReceiveStatistics> rtp_receive_statistics_;
   const std::unique_ptr<RtpRtcp> rtp_rtcp_;
   ProcessThread* process_thread_;
+
+  std::unique_ptr<RtpStreamReceiverInterface> rtp_stream_receiver_;
 };
 
 }  // namespace webrtc

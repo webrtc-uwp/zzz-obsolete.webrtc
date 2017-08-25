@@ -12,23 +12,21 @@
 
 #include <vector>
 
-#include "webrtc/base/criticalsection.h"
 #include "webrtc/modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "webrtc/rtc_base/criticalsection.h"
 #include "webrtc/system_wrappers/include/clock.h"
 #include "webrtc/typedefs.h"
 
 namespace webrtc {
 
-class ViEEncoder;
+class VideoStreamEncoder;
 
 class EncoderRtcpFeedback : public RtcpIntraFrameObserver {
  public:
   EncoderRtcpFeedback(Clock* clock,
                        const std::vector<uint32_t>& ssrcs,
-                       ViEEncoder* encoder);
+                       VideoStreamEncoder* encoder);
   void OnReceivedIntraFrameRequest(uint32_t ssrc) override;
-  void OnReceivedSLI(uint32_t ssrc, uint8_t picture_id) override;
-  void OnReceivedRPSI(uint32_t ssrc, uint64_t picture_id) override;
 
  private:
   bool HasSsrc(uint32_t ssrc);
@@ -36,7 +34,7 @@ class EncoderRtcpFeedback : public RtcpIntraFrameObserver {
 
   Clock* const clock_;
   const std::vector<uint32_t> ssrcs_;
-  ViEEncoder* const vie_encoder_;
+  VideoStreamEncoder* const video_stream_encoder_;
 
   rtc::CriticalSection crit_;
   std::vector<int64_t> time_last_intra_request_ms_ GUARDED_BY(crit_);

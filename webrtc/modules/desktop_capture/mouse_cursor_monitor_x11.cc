@@ -17,10 +17,11 @@
 #include <X11/Xutil.h>
 
 #include "webrtc/modules/desktop_capture/desktop_capture_options.h"
+#include "webrtc/modules/desktop_capture/desktop_capture_types.h"
 #include "webrtc/modules/desktop_capture/desktop_frame.h"
 #include "webrtc/modules/desktop_capture/mouse_cursor.h"
 #include "webrtc/modules/desktop_capture/x11/x_error_trap.h"
-#include "webrtc/system_wrappers/include/logging.h"
+#include "webrtc/rtc_base/logging.h"
 
 namespace {
 
@@ -185,8 +186,27 @@ void MouseCursorMonitorX11::Capture() {
           (window_ == root_window || child_window != None) ? INSIDE : OUTSIDE;
     }
 
-    callback_->OnMouseCursorPosition(state,
-                                     webrtc::DesktopVector(win_x, win_y));
+    // As the comments to GetTopLevelWindow() above indicate, in window capture,
+    // the cursor position capture happens in |window_|, while the frame catpure
+    // happens in |child_window|. These two windows are not alwyas same, as
+    // window manager may add some decorations to the |window_|. So translate
+    // the coordinate in |window_| to the coordinate space of |child_window|.
+    if (window_ != root_window && state == INSIDE) {
+      int translated_x, translated_y;
+      Window unused;
+      if (XTranslateCoordinates(display(), window_, child_window, win_x, win_y,
+                                &translated_x, &translated_y, &unused)) {
+        win_x = translated_x;
+        win_y = translated_y;
+      }
+    }
+
+    const DesktopVector position(win_x, win_y);
+    // TODO(zijiehe): Remove this overload.
+    callback_->OnMouseCursorPosition(state, position);
+    // X11 always starts the coordinate from (0, 0), so we do not need to
+    // translate here.
+    callback_->OnMouseCursorPosition(position);
   }
 }
 
@@ -251,6 +271,12 @@ MouseCursorMonitor* MouseCursorMonitor::CreateForScreen(
     return NULL;
   return new MouseCursorMonitorX11(
       options, DefaultRootWindow(options.x_display()->display()));
+}
+
+std::unique_ptr<MouseCursorMonitor> MouseCursorMonitor::Create(
+    const DesktopCaptureOptions& options) {
+  return std::unique_ptr<MouseCursorMonitor>(
+      CreateForScreen(options, kFullDesktopScreenId));
 }
 
 }  // namespace webrtc

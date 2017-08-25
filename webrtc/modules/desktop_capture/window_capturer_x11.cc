@@ -17,15 +17,15 @@
 
 #include <algorithm>
 
-#include "webrtc/base/constructormagic.h"
-#include "webrtc/base/scoped_ref_ptr.h"
-#include "webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "webrtc/modules/desktop_capture/desktop_capture_options.h"
+#include "webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "webrtc/modules/desktop_capture/desktop_frame.h"
 #include "webrtc/modules/desktop_capture/x11/shared_x_display.h"
 #include "webrtc/modules/desktop_capture/x11/x_error_trap.h"
 #include "webrtc/modules/desktop_capture/x11/x_server_pixel_buffer.h"
-#include "webrtc/system_wrappers/include/logging.h"
+#include "webrtc/rtc_base/constructormagic.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/scoped_ref_ptr.h"
 
 namespace webrtc {
 
@@ -110,6 +110,9 @@ class WindowCapturerLinux : public DesktopCapturer,
 
   // Returns window title for the specified X |window|.
   bool GetWindowTitle(::Window window, std::string* title);
+
+  // Return WM_STATE property of the |window|.
+  int32_t GetWindowState(::Window window);
 
   Callback* callback_ = nullptr;
 
@@ -286,6 +289,14 @@ void WindowCapturerLinux::CaptureFrame() {
     return;
   }
 
+  if (GetWindowState(selected_window_) == IconicState) {
+    // Window is in minimized. Return a 1x1 frame as same as OSX/Win does.
+    std::unique_ptr<DesktopFrame> frame(
+        new BasicDesktopFrame(DesktopSize(1, 1)));
+    callback_->OnCaptureResult(Result::SUCCESS, std::move(frame));
+    return;
+  }
+
   std::unique_ptr<DesktopFrame> frame(
       new BasicDesktopFrame(x_server_pixel_buffer_.window_size()));
 
@@ -316,14 +327,10 @@ bool WindowCapturerLinux::HandleXEvent(const XEvent& event) {
   return false;
 }
 
+// TODO(zijiehe): This function should return the ancestor window of |window|
+// other than the root_window.
 ::Window WindowCapturerLinux::GetApplicationWindow(::Window window) {
-  // Get WM_STATE property of the window.
-  XWindowProperty<uint32_t> window_state(display(), window, wm_state_atom_);
-
-  // WM_STATE is considered to be set to WithdrawnState when it missing.
-  int32_t state = window_state.is_valid() ?
-      *window_state.data() : WithdrawnState;
-
+  int32_t state = GetWindowState(window);
   if (state == NormalState) {
     // Window has WM_STATE==NormalState. Return it.
     return window;
@@ -416,6 +423,14 @@ bool WindowCapturerLinux::GetWindowTitle(::Window window, std::string* title) {
       XFree(window_name.value);
   }
   return result;
+}
+
+int32_t WindowCapturerLinux::GetWindowState(::Window window) {
+  // Get WM_STATE property of the window.
+  XWindowProperty<uint32_t> window_state(display(), window, wm_state_atom_);
+
+  // WM_STATE is considered to be set to WithdrawnState when it missing.
+  return window_state.is_valid() ? *window_state.data() : WithdrawnState;
 }
 
 }  // namespace

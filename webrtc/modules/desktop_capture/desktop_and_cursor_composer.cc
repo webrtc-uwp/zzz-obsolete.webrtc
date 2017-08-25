@@ -12,10 +12,14 @@
 
 #include <string.h>
 
-#include "webrtc/base/constructormagic.h"
+#include <utility>
+
 #include "webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "webrtc/modules/desktop_capture/desktop_frame.h"
 #include "webrtc/modules/desktop_capture/mouse_cursor.h"
+#include "webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/constructormagic.h"
 
 namespace webrtc {
 
@@ -75,12 +79,13 @@ DesktopFrameWithCursor::DesktopFrameWithCursor(
     std::unique_ptr<DesktopFrame> frame,
     const MouseCursor& cursor,
     const DesktopVector& position)
-    : DesktopFrame(frame->size(),
+    : DesktopFrame(frame->rect(),
                    frame->stride(),
                    frame->data(),
                    frame->shared_memory()) {
   set_dpi(frame->dpi());
   set_capture_time_ms(frame->capture_time_ms());
+  set_capturer_id(frame->capturer_id());
   mutable_updated_region()->Swap(frame->mutable_updated_region());
   original_frame_ = std::move(frame);
 
@@ -129,9 +134,16 @@ DesktopAndCursorComposer::DesktopAndCursorComposer(
     MouseCursorMonitor* mouse_monitor)
     : desktop_capturer_(desktop_capturer),
       mouse_monitor_(mouse_monitor) {
+  RTC_DCHECK(desktop_capturer_);
 }
 
-DesktopAndCursorComposer::~DesktopAndCursorComposer() {}
+DesktopAndCursorComposer::DesktopAndCursorComposer(
+    std::unique_ptr<DesktopCapturer> desktop_capturer,
+    const DesktopCaptureOptions& options)
+    : DesktopAndCursorComposer(desktop_capturer.release(),
+                               MouseCursorMonitor::Create(options).release()) {}
+
+DesktopAndCursorComposer::~DesktopAndCursorComposer() = default;
 
 void DesktopAndCursorComposer::Start(DesktopCapturer::Callback* callback) {
   callback_ = callback;

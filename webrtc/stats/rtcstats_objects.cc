@@ -12,31 +12,31 @@
 
 namespace webrtc {
 
-const char* RTCDataChannelState::kConnecting = "connecting";
-const char* RTCDataChannelState::kOpen = "open";
-const char* RTCDataChannelState::kClosing = "closing";
-const char* RTCDataChannelState::kClosed = "closed";
+const char* const RTCDataChannelState::kConnecting = "connecting";
+const char* const RTCDataChannelState::kOpen = "open";
+const char* const RTCDataChannelState::kClosing = "closing";
+const char* const RTCDataChannelState::kClosed = "closed";
 
-const char* RTCStatsIceCandidatePairState::kFrozen = "frozen";
-const char* RTCStatsIceCandidatePairState::kWaiting = "waiting";
-const char* RTCStatsIceCandidatePairState::kInProgress = "in-progress";
-const char* RTCStatsIceCandidatePairState::kFailed = "failed";
-const char* RTCStatsIceCandidatePairState::kSucceeded = "succeeded";
+const char* const RTCStatsIceCandidatePairState::kFrozen = "frozen";
+const char* const RTCStatsIceCandidatePairState::kWaiting = "waiting";
+const char* const RTCStatsIceCandidatePairState::kInProgress = "in-progress";
+const char* const RTCStatsIceCandidatePairState::kFailed = "failed";
+const char* const RTCStatsIceCandidatePairState::kSucceeded = "succeeded";
 
 // Strings defined in https://tools.ietf.org/html/rfc5245.
-const char* RTCIceCandidateType::kHost = "host";
-const char* RTCIceCandidateType::kSrflx = "srflx";
-const char* RTCIceCandidateType::kPrflx = "prflx";
-const char* RTCIceCandidateType::kRelay = "relay";
+const char* const RTCIceCandidateType::kHost = "host";
+const char* const RTCIceCandidateType::kSrflx = "srflx";
+const char* const RTCIceCandidateType::kPrflx = "prflx";
+const char* const RTCIceCandidateType::kRelay = "relay";
 
-const char* RTCDtlsTransportState::kNew = "new";
-const char* RTCDtlsTransportState::kConnecting = "connecting";
-const char* RTCDtlsTransportState::kConnected = "connected";
-const char* RTCDtlsTransportState::kClosed = "closed";
-const char* RTCDtlsTransportState::kFailed = "failed";
+const char* const RTCDtlsTransportState::kNew = "new";
+const char* const RTCDtlsTransportState::kConnecting = "connecting";
+const char* const RTCDtlsTransportState::kConnected = "connected";
+const char* const RTCDtlsTransportState::kClosed = "closed";
+const char* const RTCDtlsTransportState::kFailed = "failed";
 
-const char* RTCMediaStreamTrackKind::kAudio = "audio";
-const char* RTCMediaStreamTrackKind::kVideo = "video";
+const char* const RTCMediaStreamTrackKind::kAudio = "audio";
+const char* const RTCMediaStreamTrackKind::kVideo = "video";
 
 WEBRTC_RTCSTATS_IMPL(RTCCertificateStats, RTCStats, "certificate",
     &fingerprint,
@@ -349,32 +349,35 @@ RTCMediaStreamStats::~RTCMediaStreamStats() {
 }
 
 WEBRTC_RTCSTATS_IMPL(RTCMediaStreamTrackStats, RTCStats, "track",
-    &track_identifier,
-    &remote_source,
-    &ended,
-    &detached,
-    &kind,
-    &frame_width,
-    &frame_height,
-    &frames_per_second,
-    &frames_sent,
-    &frames_received,
-    &frames_decoded,
-    &frames_dropped,
-    &frames_corrupted,
-    &partial_frames_lost,
-    &full_frames_lost,
-    &audio_level,
-    &echo_return_loss,
-    &echo_return_loss_enhancement);
+                     &track_identifier,
+                     &remote_source,
+                     &ended,
+                     &detached,
+                     &kind,
+                     &frame_width,
+                     &frame_height,
+                     &frames_per_second,
+                     &frames_sent,
+                     &frames_received,
+                     &frames_decoded,
+                     &frames_dropped,
+                     &frames_corrupted,
+                     &partial_frames_lost,
+                     &full_frames_lost,
+                     &audio_level,
+                     &total_audio_energy,
+                     &total_samples_duration,
+                     &echo_return_loss,
+                     &echo_return_loss_enhancement);
 
 RTCMediaStreamTrackStats::RTCMediaStreamTrackStats(
     const std::string& id, int64_t timestamp_us, const char* kind)
     : RTCMediaStreamTrackStats(std::string(id), timestamp_us, kind) {
 }
 
-RTCMediaStreamTrackStats::RTCMediaStreamTrackStats(
-    std::string&& id, int64_t timestamp_us, const char* kind)
+RTCMediaStreamTrackStats::RTCMediaStreamTrackStats(std::string&& id,
+                                                   int64_t timestamp_us,
+                                                   const char* kind)
     : RTCStats(std::move(id), timestamp_us),
       track_identifier("trackIdentifier"),
       remote_source("remoteSource"),
@@ -392,6 +395,8 @@ RTCMediaStreamTrackStats::RTCMediaStreamTrackStats(
       partial_frames_lost("partialFramesLost"),
       full_frames_lost("fullFramesLost"),
       audio_level("audioLevel"),
+      total_audio_energy("totalAudioEnergy"),
+      total_samples_duration("totalSamplesDuration"),
       echo_return_loss("echoReturnLoss"),
       echo_return_loss_enhancement("echoReturnLossEnhancement") {
   RTC_DCHECK(kind == RTCMediaStreamTrackKind::kAudio ||
@@ -417,9 +422,10 @@ RTCMediaStreamTrackStats::RTCMediaStreamTrackStats(
       partial_frames_lost(other.partial_frames_lost),
       full_frames_lost(other.full_frames_lost),
       audio_level(other.audio_level),
+      total_audio_energy(other.total_audio_energy),
+      total_samples_duration(other.total_samples_duration),
       echo_return_loss(other.echo_return_loss),
-      echo_return_loss_enhancement(other.echo_return_loss_enhancement) {
-}
+      echo_return_loss_enhancement(other.echo_return_loss_enhancement) {}
 
 RTCMediaStreamTrackStats::~RTCMediaStreamTrackStats() {
 }

@@ -10,15 +10,17 @@
 
 #include <windows.h>
 
-#include "webrtc/base/constructormagic.h"
 #include "webrtc/modules/desktop_capture/desktop_geometry.h"
+#include "webrtc/rtc_base/constructormagic.h"
 
 namespace webrtc {
 
 // Output the window rect, with the left/right/bottom frame border cropped if
 // the window is maximized. |cropped_rect| is the cropped rect relative to the
 // desktop. |original_rect| is the original rect returned from GetWindowRect.
-// Returns true if all API calls succeeded.
+// Returns true if all API calls succeeded. The returned DesktopRect is in
+// system coordinates, i.e. the primary monitor on the system always starts from
+// (0, 0).
 bool GetCroppedWindowRect(HWND window,
                           DesktopRect* cropped_rect,
                           DesktopRect* original_rect);

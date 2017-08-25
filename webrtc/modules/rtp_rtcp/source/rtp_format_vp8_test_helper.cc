@@ -68,15 +68,14 @@ void RtpFormatVp8TestHelper::GetAllPacketsAndCheck(
     const bool* expected_frag_start,
     size_t expected_num_packets) {
   ASSERT_TRUE(inited_);
-  bool last = false;
   for (size_t i = 0; i < expected_num_packets; ++i) {
     std::ostringstream ss;
     ss << "Checking packet " << i;
     SCOPED_TRACE(ss.str());
-    EXPECT_TRUE(packetizer->NextPacket(&packet_, &last));
-    CheckPacket(expected_sizes[i], last, expected_frag_start[i]);
+    EXPECT_TRUE(packetizer->NextPacket(&packet_));
+    CheckPacket(expected_sizes[i], i + 1 == expected_num_packets,
+                expected_frag_start[i]);
   }
-  EXPECT_TRUE(last);
 }
 
 // Payload descriptor
@@ -159,17 +158,11 @@ void RtpFormatVp8TestHelper::CheckPictureID() {
   auto buffer = packet_.payload();
   if (hdr_info_->pictureId != kNoPictureId) {
     EXPECT_BIT_I_EQ(buffer[1], 1);
-    if (hdr_info_->pictureId > 0x7F) {
-      EXPECT_BIT_EQ(buffer[payload_start_], 7, 1);
-      EXPECT_EQ(buffer[payload_start_] & 0x7F,
-                (hdr_info_->pictureId >> 8) & 0x7F);
-      EXPECT_EQ(buffer[payload_start_ + 1], hdr_info_->pictureId & 0xFF);
-      payload_start_ += 2;
-    } else {
-      EXPECT_BIT_EQ(buffer[payload_start_], 7, 0);
-      EXPECT_EQ(buffer[payload_start_] & 0x7F, (hdr_info_->pictureId) & 0x7F);
-      payload_start_ += 1;
-    }
+    EXPECT_BIT_EQ(buffer[payload_start_], 7, 1);
+    EXPECT_EQ(buffer[payload_start_] & 0x7F,
+              (hdr_info_->pictureId >> 8) & 0x7F);
+    EXPECT_EQ(buffer[payload_start_ + 1], hdr_info_->pictureId & 0xFF);
+    payload_start_ += 2;
   } else {
     EXPECT_BIT_I_EQ(buffer[1], 0);
   }

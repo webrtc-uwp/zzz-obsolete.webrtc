@@ -10,10 +10,10 @@
 
 #include "webrtc/modules/rtp_rtcp/source/rtp_header_extensions.h"
 
-#include "webrtc/base/checks.h"
-#include "webrtc/base/logging.h"
 #include "webrtc/modules/rtp_rtcp/include/rtp_cvo.h"
 #include "webrtc/modules/rtp_rtcp/source/byte_io.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
 
 namespace webrtc {
 // Absolute send time in RTP streams.
@@ -33,15 +33,19 @@ namespace webrtc {
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 constexpr RTPExtensionType AbsoluteSendTime::kId;
 constexpr uint8_t AbsoluteSendTime::kValueSizeBytes;
-constexpr const char* AbsoluteSendTime::kUri;
+constexpr const char AbsoluteSendTime::kUri[];
 
-bool AbsoluteSendTime::Parse(const uint8_t* data, uint32_t* time_24bits) {
-  *time_24bits = ByteReader<uint32_t, 3>::ReadBigEndian(data);
+bool AbsoluteSendTime::Parse(rtc::ArrayView<const uint8_t> data,
+                             uint32_t* time_24bits) {
+  if (data.size() != 3)
+    return false;
+  *time_24bits = ByteReader<uint32_t, 3>::ReadBigEndian(data.data());
   return true;
 }
 
-bool AbsoluteSendTime::Write(uint8_t* data, int64_t time_ms) {
-  ByteWriter<uint32_t, 3>::WriteBigEndian(data, MsTo24Bits(time_ms));
+bool AbsoluteSendTime::Write(uint8_t* data, uint32_t time_24bits) {
+  RTC_DCHECK_LE(time_24bits, 0x00FFFFFF);
+  ByteWriter<uint32_t, 3>::WriteBigEndian(data, time_24bits);
   return true;
 }
 
@@ -59,11 +63,13 @@ bool AbsoluteSendTime::Write(uint8_t* data, int64_t time_ms) {
 //
 constexpr RTPExtensionType AudioLevel::kId;
 constexpr uint8_t AudioLevel::kValueSizeBytes;
-constexpr const char* AudioLevel::kUri;
+constexpr const char AudioLevel::kUri[];
 
-bool AudioLevel::Parse(const uint8_t* data,
+bool AudioLevel::Parse(rtc::ArrayView<const uint8_t> data,
                        bool* voice_activity,
                        uint8_t* audio_level) {
+  if (data.size() != 1)
+    return false;
   *voice_activity = (data[0] & 0x80) != 0;
   *audio_level = data[0] & 0x7F;
   return true;
@@ -95,10 +101,13 @@ bool AudioLevel::Write(uint8_t* data,
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 constexpr RTPExtensionType TransmissionOffset::kId;
 constexpr uint8_t TransmissionOffset::kValueSizeBytes;
-constexpr const char* TransmissionOffset::kUri;
+constexpr const char TransmissionOffset::kUri[];
 
-bool TransmissionOffset::Parse(const uint8_t* data, int32_t* rtp_time) {
-  *rtp_time = ByteReader<int32_t, 3>::ReadBigEndian(data);
+bool TransmissionOffset::Parse(rtc::ArrayView<const uint8_t> data,
+                               int32_t* rtp_time) {
+  if (data.size() != 3)
+    return false;
+  *rtp_time = ByteReader<int32_t, 3>::ReadBigEndian(data.data());
   return true;
 }
 
@@ -115,10 +124,13 @@ bool TransmissionOffset::Write(uint8_t* data, int32_t rtp_time) {
 //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 constexpr RTPExtensionType TransportSequenceNumber::kId;
 constexpr uint8_t TransportSequenceNumber::kValueSizeBytes;
-constexpr const char* TransportSequenceNumber::kUri;
+constexpr const char TransportSequenceNumber::kUri[];
 
-bool TransportSequenceNumber::Parse(const uint8_t* data, uint16_t* value) {
-  *value = ByteReader<uint16_t>::ReadBigEndian(data);
+bool TransportSequenceNumber::Parse(rtc::ArrayView<const uint8_t> data,
+                                    uint16_t* value) {
+  if (data.size() != 2)
+    return false;
+  *value = ByteReader<uint16_t>::ReadBigEndian(data.data());
   return true;
 }
 
@@ -140,9 +152,12 @@ bool TransportSequenceNumber::Write(uint8_t* data, uint16_t value) {
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 constexpr RTPExtensionType VideoOrientation::kId;
 constexpr uint8_t VideoOrientation::kValueSizeBytes;
-constexpr const char* VideoOrientation::kUri;
+constexpr const char VideoOrientation::kUri[];
 
-bool VideoOrientation::Parse(const uint8_t* data, VideoRotation* rotation) {
+bool VideoOrientation::Parse(rtc::ArrayView<const uint8_t> data,
+                             VideoRotation* rotation) {
+  if (data.size() != 1)
+    return false;
   *rotation = ConvertCVOByteToVideoRotation(data[0]);
   return true;
 }
@@ -152,7 +167,10 @@ bool VideoOrientation::Write(uint8_t* data, VideoRotation rotation) {
   return true;
 }
 
-bool VideoOrientation::Parse(const uint8_t* data, uint8_t* value) {
+bool VideoOrientation::Parse(rtc::ArrayView<const uint8_t> data,
+                             uint8_t* value) {
+  if (data.size() != 1)
+    return false;
   *value = data[0];
   return true;
 }
@@ -169,12 +187,14 @@ bool VideoOrientation::Write(uint8_t* data, uint8_t value) {
 //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 constexpr RTPExtensionType PlayoutDelayLimits::kId;
 constexpr uint8_t PlayoutDelayLimits::kValueSizeBytes;
-constexpr const char* PlayoutDelayLimits::kUri;
+constexpr const char PlayoutDelayLimits::kUri[];
 
-bool PlayoutDelayLimits::Parse(const uint8_t* data,
+bool PlayoutDelayLimits::Parse(rtc::ArrayView<const uint8_t> data,
                                PlayoutDelay* playout_delay) {
   RTC_DCHECK(playout_delay);
-  uint32_t raw = ByteReader<uint32_t, 3>::ReadBigEndian(data);
+  if (data.size() != 3)
+    return false;
+  uint32_t raw = ByteReader<uint32_t, 3>::ReadBigEndian(data.data());
   uint16_t min_raw = (raw >> 12);
   uint16_t max_raw = (raw & 0xfff);
   if (min_raw > max_raw)
@@ -195,5 +215,148 @@ bool PlayoutDelayLimits::Write(uint8_t* data,
   ByteWriter<uint32_t, 3>::WriteBigEndian(data, (min_delay << 12) | max_delay);
   return true;
 }
+
+// Video Content Type.
+//
+// E.g. default video or screenshare.
+//
+//    0                   1
+//    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |  ID   | len=0 | Content type  |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+constexpr RTPExtensionType VideoContentTypeExtension::kId;
+constexpr uint8_t VideoContentTypeExtension::kValueSizeBytes;
+constexpr const char VideoContentTypeExtension::kUri[];
+
+bool VideoContentTypeExtension::Parse(rtc::ArrayView<const uint8_t> data,
+                                      VideoContentType* content_type) {
+  if (data.size() == 1 &&
+      data[0] < static_cast<uint8_t>(VideoContentType::TOTAL_CONTENT_TYPES)) {
+    *content_type = static_cast<VideoContentType>(data[0]);
+    return true;
+  }
+  return false;
+}
+
+bool VideoContentTypeExtension::Write(uint8_t* data,
+                                      VideoContentType content_type) {
+  data[0] = static_cast<uint8_t>(content_type);
+  return true;
+}
+
+// Video Timing.
+// 6 timestamps in milliseconds counted from capture time stored in rtp header:
+// encode start/finish, packetization complete, pacer exit and reserved for
+// modification by the network modification.
+//    0                   1                   2                   3
+//    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |  ID   | len=11|  encode start ms delta          | encode finish |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   | ms delta      |  packetizer finish ms delta     | pacer exit    |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   | ms delta      |  network timestamp ms delta     | network2 time-|
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   | stamp ms delta|
+//   +-+-+-+-+-+-+-+-+
+
+constexpr RTPExtensionType VideoTimingExtension::kId;
+constexpr uint8_t VideoTimingExtension::kValueSizeBytes;
+constexpr const char VideoTimingExtension::kUri[];
+
+bool VideoTimingExtension::Parse(rtc::ArrayView<const uint8_t> data,
+                                 VideoSendTiming* timing) {
+  RTC_DCHECK(timing);
+  if (data.size() != kValueSizeBytes)
+    return false;
+  timing->encode_start_delta_ms =
+      ByteReader<uint16_t>::ReadBigEndian(data.data());
+  timing->encode_finish_delta_ms = ByteReader<uint16_t>::ReadBigEndian(
+      data.data() + 2 * VideoSendTiming::kEncodeFinishDeltaIdx);
+  timing->packetization_finish_delta_ms = ByteReader<uint16_t>::ReadBigEndian(
+      data.data() + 2 * VideoSendTiming::kPacketizationFinishDeltaIdx);
+  timing->pacer_exit_delta_ms = ByteReader<uint16_t>::ReadBigEndian(
+      data.data() + 2 * VideoSendTiming::kPacerExitDeltaIdx);
+  timing->network_timstamp_delta_ms = ByteReader<uint16_t>::ReadBigEndian(
+      data.data() + 2 * VideoSendTiming::kNetworkTimestampDeltaIdx);
+  timing->network2_timstamp_delta_ms = ByteReader<uint16_t>::ReadBigEndian(
+      data.data() + 2 * VideoSendTiming::kNetwork2TimestampDeltaIdx);
+  timing->is_timing_frame = true;
+  return true;
+}
+
+bool VideoTimingExtension::Write(uint8_t* data, const VideoSendTiming& timing) {
+  ByteWriter<uint16_t>::WriteBigEndian(data, timing.encode_start_delta_ms);
+  ByteWriter<uint16_t>::WriteBigEndian(
+      data + 2 * VideoSendTiming::kEncodeFinishDeltaIdx,
+      timing.encode_finish_delta_ms);
+  ByteWriter<uint16_t>::WriteBigEndian(
+      data + 2 * VideoSendTiming::kPacketizationFinishDeltaIdx,
+      timing.packetization_finish_delta_ms);
+  ByteWriter<uint16_t>::WriteBigEndian(
+      data + 2 * VideoSendTiming::kPacerExitDeltaIdx,
+      timing.pacer_exit_delta_ms);
+  ByteWriter<uint16_t>::WriteBigEndian(
+      data + 2 * VideoSendTiming::kNetworkTimestampDeltaIdx, 0);  // reserved
+  ByteWriter<uint16_t>::WriteBigEndian(
+      data + 2 * VideoSendTiming::kNetwork2TimestampDeltaIdx, 0);  // reserved
+  return true;
+}
+
+bool VideoTimingExtension::Write(uint8_t* data,
+                                 uint16_t time_delta_ms,
+                                 uint8_t idx) {
+  RTC_DCHECK_LT(idx, 6);
+  ByteWriter<uint16_t>::WriteBigEndian(data + 2 * idx, time_delta_ms);
+  return true;
+}
+
+bool BaseRtpStringExtension::Parse(rtc::ArrayView<const uint8_t> data,
+                                   StringRtpHeaderExtension* str) {
+  if (data.empty() || data[0] == 0)  // Valid string extension can't be empty.
+    return false;
+  str->Set(data);
+  RTC_DCHECK(!str->empty());
+  return true;
+}
+
+bool BaseRtpStringExtension::Write(uint8_t* data,
+                                   const StringRtpHeaderExtension& str) {
+  RTC_DCHECK_GE(str.size(), 1);
+  RTC_DCHECK_LE(str.size(), StringRtpHeaderExtension::kMaxSize);
+  memcpy(data, str.data(), str.size());
+  return true;
+}
+
+bool BaseRtpStringExtension::Parse(rtc::ArrayView<const uint8_t> data,
+                                   std::string* str) {
+  if (data.empty() || data[0] == 0)  // Valid string extension can't be empty.
+    return false;
+  const char* cstr = reinterpret_cast<const char*>(data.data());
+  // If there is a \0 character in the middle of the |data|, treat it as end
+  // of the string. Well-formed string extensions shouldn't contain it.
+  str->assign(cstr, strnlen(cstr, data.size()));
+  RTC_DCHECK(!str->empty());
+  return true;
+}
+
+bool BaseRtpStringExtension::Write(uint8_t* data, const std::string& str) {
+  RTC_DCHECK_GE(str.size(), 1);
+  RTC_DCHECK_LE(str.size(), StringRtpHeaderExtension::kMaxSize);
+  memcpy(data, str.data(), str.size());
+  return true;
+}
+
+// Constant declarations for string RTP header extension types.
+
+constexpr RTPExtensionType RtpStreamId::kId;
+constexpr const char RtpStreamId::kUri[];
+
+constexpr RTPExtensionType RepairedRtpStreamId::kId;
+constexpr const char RepairedRtpStreamId::kUri[];
+
+constexpr RTPExtensionType RtpMid::kId;
+constexpr const char RtpMid::kUri[];
 
 }  // namespace webrtc

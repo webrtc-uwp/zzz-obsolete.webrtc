@@ -13,10 +13,11 @@
 
 #include <memory>
 
-#include "webrtc/base/constructormagic.h"
+#include "webrtc/modules/desktop_capture/desktop_capture_types.h"
 #include "webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "webrtc/modules/desktop_capture/desktop_region.h"
 #include "webrtc/modules/desktop_capture/shared_memory.h"
+#include "webrtc/rtc_base/constructormagic.h"
 #include "webrtc/typedefs.h"
 
 namespace webrtc {
@@ -30,7 +31,14 @@ class DesktopFrame {
   virtual ~DesktopFrame();
 
   // Size of the frame.
-  const DesktopSize& size() const { return size_; }
+  DesktopSize size() const { return rect_.size(); }
+
+  // The top-left of the frame in full desktop coordinates. E.g. the top left
+  // monitor should start from (0, 0).
+  DesktopVector top_left() const { return rect_.top_left(); }
+
+  // Rectangle covered by the frame.
+  const DesktopRect& rect() const { return rect_; }
 
   // Distance in the buffer between two neighboring rows in bytes.
   int stride() const { return stride_; }
@@ -68,8 +76,26 @@ class DesktopFrame {
   // A helper to return the data pointer of a frame at the specified position.
   uint8_t* GetFrameDataAtPos(const DesktopVector& pos) const;
 
+  // The DesktopCapturer implementation which generates current DesktopFrame.
+  // Not all DesktopCapturer implementations set this field; it's set to
+  // kUnknown by default.
+  uint32_t capturer_id() const { return capturer_id_; }
+  void set_capturer_id(uint32_t capturer_id) {
+    capturer_id_ = capturer_id;
+  }
+
  protected:
+  // Deprecated, use the constructor below.
+  // TODO(zijiehe): Remove deprecated constructors. DesktopFrame should describe
+  // its own position in the system. See
+  // https://bugs.chromium.org/p/webrtc/issues/detail?id=7950
   DesktopFrame(DesktopSize size,
+               int stride,
+               uint8_t* data,
+               SharedMemory* shared_memory);
+
+  // Preferred.
+  DesktopFrame(DesktopRect rect,
                int stride,
                uint8_t* data,
                SharedMemory* shared_memory);
@@ -81,12 +107,13 @@ class DesktopFrame {
   SharedMemory* const shared_memory_;
 
  private:
-  const DesktopSize size_;
+  const DesktopRect rect_;
   const int stride_;
 
   DesktopRegion updated_region_;
   DesktopVector dpi_;
   int64_t capture_time_ms_;
+  uint32_t capturer_id_;
 
   RTC_DISALLOW_COPY_AND_ASSIGN(DesktopFrame);
 };
@@ -94,7 +121,12 @@ class DesktopFrame {
 // A DesktopFrame that stores data in the heap.
 class BasicDesktopFrame : public DesktopFrame {
  public:
+  // Deprecated, use the next constructor.
   explicit BasicDesktopFrame(DesktopSize size);
+
+  // Preferred.
+  explicit BasicDesktopFrame(DesktopRect rect);
+
   ~BasicDesktopFrame() override;
 
   // Creates a BasicDesktopFrame that contains copy of |frame|.
@@ -107,23 +139,44 @@ class BasicDesktopFrame : public DesktopFrame {
 // A DesktopFrame that stores data in shared memory.
 class SharedMemoryDesktopFrame : public DesktopFrame {
  public:
+  // May return nullptr if |shared_memory_factory| failed to create a
+  // SharedMemory instance.
+  // |shared_memory_factory| should not be nullptr.
+  // Deprecated, use the next Create() function.
   static std::unique_ptr<DesktopFrame> Create(
       DesktopSize size,
       SharedMemoryFactory* shared_memory_factory);
 
+  // Preferred.
   static std::unique_ptr<DesktopFrame> Create(
-      DesktopSize size,
-      std::unique_ptr<SharedMemory> shared_memory);
+      DesktopRect rect,
+      SharedMemoryFactory* shared_memory_factory);
 
   // Takes ownership of |shared_memory|.
-  // TODO(zijiehe): Hide constructors after fake_desktop_capturer.cc has been
-  // migrated, Create() is preferred.
+  // Deprecated, use the next constructor.
   SharedMemoryDesktopFrame(DesktopSize size,
                            int stride,
                            SharedMemory* shared_memory);
+
+  // Preferred.
+  SharedMemoryDesktopFrame(DesktopRect rect,
+                           int stride,
+                           std::unique_ptr<SharedMemory> shared_memory);
+
   ~SharedMemoryDesktopFrame() override;
 
  private:
+  // Avoid unexpected order of parameter evaluation.
+  // Executing both std::unique_ptr<T>::operator->() and
+  // std::unique_ptr<T>::release() in the member initializer list is not safe.
+  // Depends on the order of parameter evaluation,
+  // std::unique_ptr<T>::operator->() may trigger assertion failure if it has
+  // been evaluated after std::unique_ptr<T>::release(). By using this
+  // constructor, std::unique_ptr<T>::operator->() won't be involved anymore.
+  SharedMemoryDesktopFrame(DesktopRect rect,
+                           int stride,
+                           SharedMemory* shared_memory);
+
   RTC_DISALLOW_COPY_AND_ASSIGN(SharedMemoryDesktopFrame);
 };
 

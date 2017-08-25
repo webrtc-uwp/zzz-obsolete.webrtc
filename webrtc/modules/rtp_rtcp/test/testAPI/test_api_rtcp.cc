@@ -12,21 +12,18 @@
 #include <memory>
 #include <vector>
 
-#include "webrtc/base/rate_limiter.h"
 #include "webrtc/common_types.h"
 #include "webrtc/modules/rtp_rtcp/include/receive_statistics.h"
 #include "webrtc/modules/rtp_rtcp/include/rtp_rtcp.h"
 #include "webrtc/modules/rtp_rtcp/include/rtp_rtcp_defines.h"
 #include "webrtc/modules/rtp_rtcp/source/rtp_receiver_audio.h"
 #include "webrtc/modules/rtp_rtcp/test/testAPI/test_api.h"
+#include "webrtc/rtc_base/rate_limiter.h"
 #include "webrtc/test/gmock.h"
 #include "webrtc/test/gtest.h"
 
 namespace webrtc {
 namespace {
-
-const uint64_t kTestPictureId = 12345678;
-const uint8_t kSliPictureId = 156;
 
 class RtcpCallback : public RtcpIntraFrameObserver {
  public:
@@ -38,14 +35,6 @@ class RtcpCallback : public RtcpIntraFrameObserver {
   virtual void OnLipSyncUpdate(const int32_t id,
                                const int32_t audioVideoOffset) {}
   virtual void OnReceivedIntraFrameRequest(uint32_t ssrc) {}
-  virtual void OnReceivedSLI(uint32_t ssrc,
-                             uint8_t pictureId) {
-    EXPECT_EQ(kSliPictureId & 0x3f, pictureId);
-  }
-  virtual void OnReceivedRPSI(uint32_t ssrc,
-                              uint64_t pictureId) {
-    EXPECT_EQ(kTestPictureId, pictureId);
-  }
 
  private:
   RtpRtcp* _rtpRtcpModule;
@@ -191,11 +180,6 @@ class RtpRtcpRtcpTest : public ::testing::Test {
   RateLimiter retransmission_rate_limiter_;
 };
 
-TEST_F(RtpRtcpRtcpTest, RTCP_PLI_RPSI) {
-  EXPECT_EQ(0, module1->SendRTCPReferencePictureSelection(kTestPictureId));
-  EXPECT_EQ(0, module1->SendRTCPSliceLossIndication(kSliPictureId));
-}
-
 TEST_F(RtpRtcpRtcpTest, RTCP_CNAME) {
   uint32_t testOfCSRC[webrtc::kRtpCsrcSize];
   EXPECT_EQ(2, rtp_receiver2_->CSRCs(testOfCSRC));
@@ -251,13 +235,14 @@ TEST_F(RtpRtcpRtcpTest, RemoteRTCPStatRemote) {
   ASSERT_EQ(1u, report_blocks.size());
 
   // |test_ssrc+1| is the SSRC of module2 that send the report.
-  EXPECT_EQ(test_ssrc+1, report_blocks[0].remoteSSRC);
-  EXPECT_EQ(test_ssrc, report_blocks[0].sourceSSRC);
+  EXPECT_EQ(test_ssrc + 1, report_blocks[0].sender_ssrc);
+  EXPECT_EQ(test_ssrc, report_blocks[0].source_ssrc);
 
-  EXPECT_EQ(0u, report_blocks[0].cumulativeLost);
-  EXPECT_LT(0u, report_blocks[0].delaySinceLastSR);
-  EXPECT_EQ(test_sequence_number, report_blocks[0].extendedHighSeqNum);
-  EXPECT_EQ(0u, report_blocks[0].fractionLost);
+  EXPECT_EQ(0u, report_blocks[0].packets_lost);
+  EXPECT_LT(0u, report_blocks[0].delay_since_last_sender_report);
+  EXPECT_EQ(test_sequence_number,
+            report_blocks[0].extended_highest_sequence_number);
+  EXPECT_EQ(0u, report_blocks[0].fraction_lost);
 }
 
 }  // namespace

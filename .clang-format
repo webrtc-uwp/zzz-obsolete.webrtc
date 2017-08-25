@@ -4,3 +4,18 @@ BasedOnStyle: Chromium
 ---
 Language: Java
 BasedOnStyle: Google
+---
+Language: ObjC
+BasedOnStyle: Google
+BinPackParameters: false
+BinPackArguments: false
+ColumnLimit: 100
+ObjCBlockIndentWidth: 2
+AllowAllParametersOfDeclarationOnNextLine: true
+AlignOperands: false
+AlwaysBreakBeforeMultilineStrings: false
+AllowShortFunctionsOnASingleLine: Inline
+BreakBeforeTernaryOperators: false
+IndentWrappedFunctionNames: true
+ContinuationIndentWidth: 4
+ObjCSpaceBeforeProtocolList: true

@@ -13,11 +13,11 @@
 #include "webrtc/p2p/base/common.h"
 #include "webrtc/p2p/base/portallocator.h"
 #include "webrtc/p2p/base/stun.h"
-#include "webrtc/base/checks.h"
-#include "webrtc/base/helpers.h"
-#include "webrtc/base/ipaddress.h"
-#include "webrtc/base/logging.h"
-#include "webrtc/base/nethelpers.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/helpers.h"
+#include "webrtc/rtc_base/ipaddress.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/nethelpers.h"
 
 namespace cricket {
 
@@ -66,7 +66,7 @@ class StunBindingRequest : public StunRequest {
   virtual void OnErrorResponse(StunMessage* response) override {
     const StunErrorCodeAttribute* attr = response->GetErrorCode();
     if (!attr) {
-      LOG(LS_ERROR) << "Bad allocate response error code";
+      LOG(LS_ERROR) << "Missing binding response error code.";
     } else {
       LOG(LS_ERROR) << "Binding error response:"
                     << " class=" << attr->eclass()
@@ -170,7 +170,6 @@ UDPPort::UDPPort(rtc::Thread* thread,
            LOCAL_PORT_TYPE,
            factory,
            network,
-           socket->GetLocalAddress().ipaddr(),
            username,
            password),
       requests_(thread),
@@ -185,7 +184,6 @@ UDPPort::UDPPort(rtc::Thread* thread,
 UDPPort::UDPPort(rtc::Thread* thread,
                  rtc::PacketSocketFactory* factory,
                  rtc::Network* network,
-                 const rtc::IPAddress& ip,
                  uint16_t min_port,
                  uint16_t max_port,
                  const std::string& username,
@@ -196,7 +194,6 @@ UDPPort::UDPPort(rtc::Thread* thread,
            LOCAL_PORT_TYPE,
            factory,
            network,
-           ip,
            min_port,
            max_port,
            username,
@@ -215,7 +212,7 @@ bool UDPPort::Init() {
   if (!SharedSocket()) {
     RTC_DCHECK(socket_ == NULL);
     socket_ = socket_factory()->CreateUdpSocket(
-        rtc::SocketAddress(ip(), 0), min_port(), max_port());
+        rtc::SocketAddress(Network()->GetBestIP(), 0), min_port(), max_port());
     if (!socket_) {
       LOG_J(LS_WARNING, this) << "UDP socket creation failed";
       return false;
@@ -379,8 +376,8 @@ void UDPPort::OnResolveResult(const rtc::SocketAddress& input,
   RTC_DCHECK(resolver_.get() != NULL);
 
   rtc::SocketAddress resolved;
-  if (error != 0 ||
-      !resolver_->GetResolvedAddress(input, ip().family(), &resolved))  {
+  if (error != 0 || !resolver_->GetResolvedAddress(
+                        input, Network()->GetBestIP().family(), &resolved)) {
     LOG_J(LS_WARNING, this) << "StunPort: stun host lookup received error "
                             << error;
     OnStunBindingOrResolveRequestFailed(input);

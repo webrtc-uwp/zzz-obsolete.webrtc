@@ -17,14 +17,15 @@
 #include <vector>
 
 #include "webrtc/api/call/transport.h"
-#include "webrtc/base/platform_file.h"
 #include "webrtc/common_types.h"
 #include "webrtc/common_video/include/frame_callback.h"
 #include "webrtc/config.h"
 #include "webrtc/media/base/videosinkinterface.h"
+#include "webrtc/rtc_base/platform_file.h"
 
 namespace webrtc {
 
+class RtpPacketSinkInterface;
 class VideoDecoder;
 
 class VideoReceiveStream {
@@ -72,6 +73,7 @@ class VideoReceiveStream {
     int jitter_buffer_ms = 0;
     int min_playout_delay_ms = 0;
     int render_delay_ms = 10;
+    uint64_t interframe_delay_sum_ms = 0;
     uint32_t frames_decoded = 0;
     rtc::Optional<uint64_t> qp_sum;
 
@@ -135,6 +137,15 @@ class VideoReceiveStream {
         bool receiver_reference_time_report = false;
       } rtcp_xr;
 
+      // TODO(nisse): This remb setting is currently set but never
+      // applied. REMB logic is now the responsibility of
+      // PacketRouter, and it will generate REMB feedback if
+      // OnReceiveBitrateChanged is used, which depends on how the
+      // estimators belonging to the ReceiveSideCongestionController
+      // are configured. Decide if this setting should be deleted, and
+      // if it needs to be replaced by a setting in PacketRouter to
+      // disable REMB feedback.
+
       // See draft-alvestrand-rmcat-remb for information.
       bool remb = false;
 
@@ -149,6 +160,9 @@ class VideoReceiveStream {
 
       // SSRC for retransmissions.
       uint32_t rtx_ssrc = 0;
+
+      // Set if the stream is protected using FlexFEC.
+      bool protected_by_flexfec = false;
 
       // Map from video payload type (apt) -> RTX payload type (pt).
       // For RTX to be enabled, both an SSRC and this mapping are needed.
@@ -198,6 +212,8 @@ class VideoReceiveStream {
   // TODO(pbos): Add info on currently-received codec to Stats.
   virtual Stats GetStats() const = 0;
 
+  virtual rtc::Optional<TimingFrameInfo> GetAndResetTimingFrameInfo() = 0;
+
   // Takes ownership of the file, is responsible for closing it later.
   // Calling this method will close and finalize any current log.
   // Giving rtc::kInvalidPlatformFileValue disables logging.
@@ -208,6 +224,13 @@ class VideoReceiveStream {
   inline void DisableEncodedFrameRecording() {
     EnableEncodedFrameRecording(rtc::kInvalidPlatformFileValue, 0);
   }
+
+  // RtpDemuxer only forwards a given RTP packet to one sink. However, some
+  // sinks, such as FlexFEC, might wish to be informed of all of the packets
+  // a given sink receives (or any set of sinks). They may do so by registering
+  // themselves as secondary sinks.
+  virtual void AddSecondarySink(RtpPacketSinkInterface* sink) = 0;
+  virtual void RemoveSecondarySink(const RtpPacketSinkInterface* sink) = 0;
 
  protected:
   virtual ~VideoReceiveStream() {}

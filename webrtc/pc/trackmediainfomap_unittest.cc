@@ -19,11 +19,11 @@
 #include "webrtc/api/rtpsenderinterface.h"
 #include "webrtc/api/test/mock_rtpreceiver.h"
 #include "webrtc/api/test/mock_rtpsender.h"
-#include "webrtc/base/refcount.h"
 #include "webrtc/media/base/mediachannel.h"
 #include "webrtc/pc/audiotrack.h"
 #include "webrtc/pc/test/fakevideotracksource.h"
 #include "webrtc/pc/videotrack.h"
+#include "webrtc/rtc_base/refcount.h"
 #include "webrtc/test/gtest.h"
 
 namespace webrtc {
@@ -85,10 +85,12 @@ class TrackMediaInfoMapTest : public testing::Test {
         remote_audio_track_(AudioTrack::Create("RemoteAudioTrack", nullptr)),
         local_video_track_(
             VideoTrack::Create("LocalVideoTrack",
-                               FakeVideoTrackSource::Create(false))),
+                               FakeVideoTrackSource::Create(false),
+                               rtc::Thread::Current())),
         remote_video_track_(
             VideoTrack::Create("RemoteVideoTrack",
-                               FakeVideoTrackSource::Create(false))) {}
+                               FakeVideoTrackSource::Create(false),
+                               rtc::Thread::Current())) {}
 
   ~TrackMediaInfoMapTest() {
     // If we have a map the ownership has been passed to the map, only delete if

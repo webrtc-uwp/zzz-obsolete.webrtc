@@ -13,11 +13,11 @@
 #include <memory>
 #include <string>
 
-#include "webrtc/base/checks.h"
-#include "webrtc/base/logging.h"
-#include "webrtc/base/refcount.h"
 #include "webrtc/media/sctp/sctptransportinternal.h"
 #include "webrtc/pc/sctputils.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/refcount.h"
 
 namespace webrtc {
 
@@ -282,8 +282,9 @@ void DataChannel::RemotePeerRequestClose() {
 }
 
 void DataChannel::SetSctpSid(int sid) {
-  RTC_DCHECK(config_.id < 0 && sid >= 0 &&
-             data_channel_type_ == cricket::DCT_SCTP);
+  RTC_DCHECK_LT(config_.id, 0);
+  RTC_DCHECK_GE(sid, 0);
+  RTC_DCHECK_EQ(data_channel_type_, cricket::DCT_SCTP);
   if (config_.id == sid) {
     return;
   }
@@ -618,8 +619,10 @@ void DataChannel::QueueControlMessage(const rtc::CopyOnWriteBuffer& buffer) {
 bool DataChannel::SendControlMessage(const rtc::CopyOnWriteBuffer& buffer) {
   bool is_open_message = handshake_state_ == kHandshakeShouldSendOpen;
 
-  RTC_DCHECK(data_channel_type_ == cricket::DCT_SCTP && writable_ &&
-             config_.id >= 0 && (!is_open_message || !config_.negotiated));
+  RTC_DCHECK_EQ(data_channel_type_, cricket::DCT_SCTP);
+  RTC_DCHECK(writable_);
+  RTC_DCHECK_GE(config_.id, 0);
+  RTC_DCHECK(!is_open_message || !config_.negotiated);
 
   cricket::SendDataParams send_params;
   send_params.sid = config_.id;

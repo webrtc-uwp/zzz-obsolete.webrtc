@@ -18,25 +18,31 @@
 #include "webrtc/p2p/base/teststunserver.h"
 #include "webrtc/p2p/base/testturnserver.h"
 #include "webrtc/p2p/client/basicportallocator.h"
-#include "webrtc/base/fakeclock.h"
-#include "webrtc/base/fakenetwork.h"
-#include "webrtc/base/firewallsocketserver.h"
-#include "webrtc/base/gunit.h"
-#include "webrtc/base/helpers.h"
-#include "webrtc/base/ipaddress.h"
-#include "webrtc/base/logging.h"
-#include "webrtc/base/natserver.h"
-#include "webrtc/base/natsocketfactory.h"
-#include "webrtc/base/network.h"
-#include "webrtc/base/physicalsocketserver.h"
-#include "webrtc/base/socketaddress.h"
-#include "webrtc/base/ssladapter.h"
-#include "webrtc/base/thread.h"
-#include "webrtc/base/virtualsocketserver.h"
+#include "webrtc/rtc_base/fakeclock.h"
+#include "webrtc/rtc_base/fakenetwork.h"
+#include "webrtc/rtc_base/firewallsocketserver.h"
+#include "webrtc/rtc_base/gunit.h"
+#include "webrtc/rtc_base/helpers.h"
+#include "webrtc/rtc_base/ipaddress.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/natserver.h"
+#include "webrtc/rtc_base/natsocketfactory.h"
+#include "webrtc/rtc_base/nethelpers.h"
+#include "webrtc/rtc_base/network.h"
+#include "webrtc/rtc_base/socketaddress.h"
+#include "webrtc/rtc_base/ssladapter.h"
+#include "webrtc/rtc_base/thread.h"
+#include "webrtc/rtc_base/virtualsocketserver.h"
 
 using rtc::IPAddress;
 using rtc::SocketAddress;
 using rtc::Thread;
+
+#define MAYBE_SKIP_IPV4                    \
+  if (!rtc::HasIPv4Enabled()) {            \
+    LOG(LS_INFO) << "No IPv4... skipping"; \
+    return;                                \
+  }
 
 static const SocketAddress kAnyAddr("0.0.0.0", 0);
 static const SocketAddress kClientAddr("11.11.11.11", 0);
@@ -48,6 +54,9 @@ static const SocketAddress kClientIPv6Addr("2401:fa00:4:1000:be30:5bff:fee5:c3",
                                            0);
 static const SocketAddress kClientIPv6Addr2(
     "2401:fa00:4:2000:be30:5bff:fee5:c3",
+    0);
+static const SocketAddress kClientIPv6Addr3(
+    "2401:fa00:4:3000:be30:5bff:fee5:c3",
     0);
 static const SocketAddress kNatUdpAddr("77.77.77.77", rtc::NAT_SERVER_UDP_PORT);
 static const SocketAddress kNatTcpAddr("77.77.77.77", rtc::NAT_SERVER_TCP_PORT);
@@ -110,10 +119,9 @@ class BasicPortAllocatorTestBase : public testing::Test,
                                    public sigslot::has_slots<> {
  public:
   BasicPortAllocatorTestBase()
-      : pss_(new rtc::PhysicalSocketServer),
-        vss_(new rtc::VirtualSocketServer(pss_.get())),
+      : vss_(new rtc::VirtualSocketServer()),
         fss_(new rtc::FirewallSocketServer(vss_.get())),
-        ss_scope_(fss_.get()),
+        thread_(fss_.get()),
         // Note that the NAT is not used by default. ResetWithStunServerAndNat
         // must be called.
         nat_factory_(vss_.get(), kNatUdpAddr, kNatTcpAddr),
@@ -458,10 +466,9 @@ class BasicPortAllocatorTestBase : public testing::Test,
     allocator().set_step_delay(kMinimumStepDelay);
   }
 
-  std::unique_ptr<rtc::PhysicalSocketServer> pss_;
   std::unique_ptr<rtc::VirtualSocketServer> vss_;
   std::unique_ptr<rtc::FirewallSocketServer> fss_;
-  rtc::SocketServerScope ss_scope_;
+  rtc::AutoSocketServerThread thread_;
   std::unique_ptr<rtc::NATServer> nat_server_;
   rtc::NATSocketFactory nat_factory_;
   std::unique_ptr<rtc::BasicPacketSocketFactory> nat_socket_factory_;
@@ -639,9 +646,9 @@ class BasicPortAllocatorTest : public FakeClockBase,
     AddTurnServers(kTurnUdpIntIPv6Addr, kTurnTcpIntIPv6Addr);
 
     allocator_->set_step_delay(kMinimumStepDelay);
-    allocator_->set_flags(allocator().flags() |
-                          PORTALLOCATOR_ENABLE_SHARED_SOCKET |
-                          PORTALLOCATOR_ENABLE_IPV6);
+    allocator_->set_flags(
+        allocator().flags() | PORTALLOCATOR_ENABLE_SHARED_SOCKET |
+        PORTALLOCATOR_ENABLE_IPV6 | PORTALLOCATOR_ENABLE_IPV6_ON_WIFI);
     EXPECT_TRUE(CreateSession(ICE_CANDIDATE_COMPONENT_RTP));
     session_->StartGettingPorts();
     EXPECT_TRUE_SIMULATED_WAIT(candidate_allocation_done_,
@@ -793,6 +800,57 @@ TEST_F(BasicPortAllocatorTest, TestGatherLowCostNetworkOnly) {
                              kDefaultAllocationTimeout, fake_clock);
   EXPECT_EQ(1U, candidates_.size());
   EXPECT_TRUE(addr_wifi.EqualIPs(candidates_[0].address()));
+}
+
+// Test that no more than allocator.max_ipv6_networks() IPv6 networks are used
+// to gather candidates.
+TEST_F(BasicPortAllocatorTest, MaxIpv6NetworksLimitEnforced) {
+  // Add three IPv6 network interfaces, but tell the allocator to only use two.
+  allocator().set_max_ipv6_networks(2);
+  AddInterface(kClientIPv6Addr, "eth0", rtc::ADAPTER_TYPE_ETHERNET);
+  AddInterface(kClientIPv6Addr2, "eth1", rtc::ADAPTER_TYPE_ETHERNET);
+  AddInterface(kClientIPv6Addr3, "eth2", rtc::ADAPTER_TYPE_ETHERNET);
+
+  // To simplify the test, only gather UDP host candidates.
+  allocator().set_flags(PORTALLOCATOR_ENABLE_IPV6 | PORTALLOCATOR_DISABLE_TCP |
+                        PORTALLOCATOR_DISABLE_STUN |
+                        PORTALLOCATOR_DISABLE_RELAY);
+
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->StartGettingPorts();
+  EXPECT_TRUE_SIMULATED_WAIT(candidate_allocation_done_,
+                             kDefaultAllocationTimeout, fake_clock);
+  EXPECT_EQ(2U, candidates_.size());
+  // Ensure the expected two interfaces (eth0 and eth1) were used.
+  EXPECT_PRED4(HasCandidate, candidates_, "local", "udp", kClientIPv6Addr);
+  EXPECT_PRED4(HasCandidate, candidates_, "local", "udp", kClientIPv6Addr2);
+}
+
+// Ensure that allocator.max_ipv6_networks() doesn't prevent IPv4 networks from
+// being used.
+TEST_F(BasicPortAllocatorTest, MaxIpv6NetworksLimitDoesNotImpactIpv4Networks) {
+  // Set the "max IPv6" limit to 1, adding two IPv6 and two IPv4 networks.
+  allocator().set_max_ipv6_networks(1);
+  AddInterface(kClientIPv6Addr, "eth0", rtc::ADAPTER_TYPE_ETHERNET);
+  AddInterface(kClientIPv6Addr2, "eth1", rtc::ADAPTER_TYPE_ETHERNET);
+  AddInterface(kClientAddr, "eth2", rtc::ADAPTER_TYPE_ETHERNET);
+  AddInterface(kClientAddr2, "eth3", rtc::ADAPTER_TYPE_ETHERNET);
+
+  // To simplify the test, only gather UDP host candidates.
+  allocator().set_flags(PORTALLOCATOR_ENABLE_IPV6 | PORTALLOCATOR_DISABLE_TCP |
+                        PORTALLOCATOR_DISABLE_STUN |
+                        PORTALLOCATOR_DISABLE_RELAY);
+
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->StartGettingPorts();
+  EXPECT_TRUE_SIMULATED_WAIT(candidate_allocation_done_,
+                             kDefaultAllocationTimeout, fake_clock);
+  EXPECT_EQ(3U, candidates_.size());
+  // Ensure that only one IPv6 interface was used, but both IPv4 interfaces
+  // were used.
+  EXPECT_PRED4(HasCandidate, candidates_, "local", "udp", kClientIPv6Addr);
+  EXPECT_PRED4(HasCandidate, candidates_, "local", "udp", kClientAddr);
+  EXPECT_PRED4(HasCandidate, candidates_, "local", "udp", kClientAddr2);
 }
 
 // Test that we could use loopback interface as host candidate.
@@ -1523,6 +1581,9 @@ TEST_F(BasicPortAllocatorTest,
 // using the fake clock.
 TEST_F(BasicPortAllocatorTestWithRealClock,
        TestSharedSocketWithServerAddressResolve) {
+  // This test relies on a real query for "localhost", so it won't work on an
+  // IPv6-only machine.
+  MAYBE_SKIP_IPV4;
   turn_server_.AddInternalSocket(rtc::SocketAddress("127.0.0.1", 3478),
                                  PROTO_UDP);
   AddInterface(kClientAddr);

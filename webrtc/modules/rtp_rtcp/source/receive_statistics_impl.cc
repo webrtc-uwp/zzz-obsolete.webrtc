@@ -13,10 +13,12 @@
 #include <math.h>
 
 #include <cstdlib>
+#include <vector>
 
 #include "webrtc/modules/remote_bitrate_estimator/test/bwe_test_logging.h"
 #include "webrtc/modules/rtp_rtcp/source/rtp_rtcp_config.h"
 #include "webrtc/modules/rtp_rtcp/source/time_util.h"
+#include "webrtc/rtc_base/logging.h"
 #include "webrtc/system_wrappers/include/clock.h"
 
 namespace webrtc {
@@ -263,8 +265,8 @@ RtcpStatistics StreamStatisticianImpl::CalculateRtcpStatistics() {
   // We need a counter for cumulative loss too.
   // TODO(danilchap): Ensure cumulative loss is below maximum value of 2^24.
   cumulative_loss_ += missing;
-  stats.cumulative_lost = cumulative_loss_;
-  stats.extended_max_sequence_number =
+  stats.packets_lost = cumulative_loss_;
+  stats.extended_highest_sequence_number =
       (received_seq_wraps_ << 16) + received_seq_max_;
   // Note: internal jitter value is in Q4 and needs to be scaled by 1/16.
   stats.jitter = jitter_q4_ >> 4;
@@ -422,8 +424,8 @@ void ReceiveStatisticsImpl::FecPacketReceived(const RTPHeader& header,
 }
 
 StatisticianMap ReceiveStatisticsImpl::GetActiveStatisticians() const {
-  rtc::CritScope cs(&receive_statistics_lock_);
   StatisticianMap active_statisticians;
+  rtc::CritScope cs(&receive_statistics_lock_);
   for (StatisticianImplMap::const_iterator it = statisticians_.begin();
        it != statisticians_.end(); ++it) {
     uint32_t secs;
@@ -492,29 +494,35 @@ void ReceiveStatisticsImpl::DataCountersUpdated(const StreamDataCounters& stats,
   }
 }
 
-void NullReceiveStatistics::IncomingPacket(const RTPHeader& rtp_header,
-                                           size_t packet_length,
-                                           bool retransmitted) {}
+std::vector<rtcp::ReportBlock> ReceiveStatistics::RtcpReportBlocks(
+    size_t max_blocks) {
+  StatisticianMap statisticians = GetActiveStatisticians();
+  std::vector<rtcp::ReportBlock> result;
+  result.reserve(std::min(max_blocks, statisticians.size()));
+  for (auto& statistician : statisticians) {
+    // TODO(danilchap): Select statistician subset across multiple calls using
+    // round-robin, as described in rfc3550 section 6.4 when single
+    // rtcp_module/receive_statistics will be used for more rtp streams.
+    if (result.size() == max_blocks)
+      break;
 
-void NullReceiveStatistics::FecPacketReceived(const RTPHeader& header,
-                                              size_t packet_length) {}
-
-StatisticianMap NullReceiveStatistics::GetActiveStatisticians() const {
-  return StatisticianMap();
+    // Do we have receive statistics to send?
+    RtcpStatistics stats;
+    if (!statistician.second->GetStatistics(&stats, true))
+      continue;
+    result.emplace_back();
+    rtcp::ReportBlock& block = result.back();
+    block.SetMediaSsrc(statistician.first);
+    block.SetFractionLost(stats.fraction_lost);
+    if (!block.SetCumulativeLost(stats.packets_lost)) {
+      LOG(LS_WARNING) << "Cumulative lost is oversized.";
+      result.pop_back();
+      continue;
+    }
+    block.SetExtHighestSeqNum(stats.extended_highest_sequence_number);
+    block.SetJitter(stats.jitter);
+  }
+  return result;
 }
-
-StreamStatistician* NullReceiveStatistics::GetStatistician(
-    uint32_t ssrc) const {
-  return NULL;
-}
-
-void NullReceiveStatistics::SetMaxReorderingThreshold(
-    int max_reordering_threshold) {}
-
-void NullReceiveStatistics::RegisterRtcpStatisticsCallback(
-    RtcpStatisticsCallback* callback) {}
-
-void NullReceiveStatistics::RegisterRtpStatisticsCallback(
-    StreamDataCountersCallback* callback) {}
 
 }  // namespace webrtc

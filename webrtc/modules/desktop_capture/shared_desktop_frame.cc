@@ -12,7 +12,7 @@
 
 #include <memory>
 
-#include "webrtc/base/constructormagic.h"
+#include "webrtc/rtc_base/constructormagic.h"
 
 namespace webrtc {
 
@@ -37,6 +37,7 @@ std::unique_ptr<SharedDesktopFrame> SharedDesktopFrame::Share() {
   std::unique_ptr<SharedDesktopFrame> result(new SharedDesktopFrame(core_));
   result->set_dpi(dpi());
   result->set_capture_time_ms(capture_time_ms());
+  result->set_capturer_id(capturer_id());
   *result->mutable_updated_region() = updated_region();
   return result;
 }
@@ -46,7 +47,7 @@ bool SharedDesktopFrame::IsShared() {
 }
 
 SharedDesktopFrame::SharedDesktopFrame(rtc::scoped_refptr<Core> core)
-    : DesktopFrame((*core)->size(),
+    : DesktopFrame((*core)->rect(),
                    (*core)->stride(),
                    (*core)->data(),
                    (*core)->shared_memory()),

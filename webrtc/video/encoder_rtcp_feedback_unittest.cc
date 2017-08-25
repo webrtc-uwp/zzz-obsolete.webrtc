@@ -10,29 +10,31 @@
 
 #include "webrtc/video/encoder_rtcp_feedback.h"
 
+#include <memory>
+
 #include "webrtc/modules/utility/include/mock/mock_process_thread.h"
 #include "webrtc/test/gmock.h"
 #include "webrtc/test/gtest.h"
 #include "webrtc/video/send_statistics_proxy.h"
-#include "webrtc/video/vie_encoder.h"
+#include "webrtc/video/video_stream_encoder.h"
 
 using ::testing::NiceMock;
 
 namespace webrtc {
 
-class MockVieEncoder : public ViEEncoder {
+class MockVideoStreamEncoder : public VideoStreamEncoder {
  public:
-  explicit MockVieEncoder(SendStatisticsProxy* send_stats_proxy)
-      : ViEEncoder(1,
-                   send_stats_proxy,
-                   VideoSendStream::Config::EncoderSettings("fake", 0, nullptr),
-                   nullptr,
-                   nullptr) {}
-  ~MockVieEncoder() { Stop(); }
+  explicit MockVideoStreamEncoder(SendStatisticsProxy* send_stats_proxy)
+      : VideoStreamEncoder(1,
+                           send_stats_proxy,
+                           VideoSendStream::Config::EncoderSettings("fake", 0,
+                                                                    nullptr),
+                           nullptr,
+                           nullptr,
+                           std::unique_ptr<OveruseFrameDetector>()) {}
+  ~MockVideoStreamEncoder() { Stop(); }
 
   MOCK_METHOD1(OnReceivedIntraFrameRequest, void(size_t));
-  MOCK_METHOD1(OnReceivedSLI, void(uint8_t picture_id));
-  MOCK_METHOD1(OnReceivedRPSI, void(uint64_t picture_id));
 };
 
 class VieKeyRequestTest : public ::testing::Test {
@@ -53,21 +55,13 @@ class VieKeyRequestTest : public ::testing::Test {
 
   SimulatedClock simulated_clock_;
   SendStatisticsProxy send_stats_proxy_;
-  MockVieEncoder encoder_;
+  MockVideoStreamEncoder encoder_;
   EncoderRtcpFeedback encoder_rtcp_feedback_;
 };
 
 TEST_F(VieKeyRequestTest, CreateAndTriggerRequests) {
   EXPECT_CALL(encoder_, OnReceivedIntraFrameRequest(0)).Times(1);
   encoder_rtcp_feedback_.OnReceivedIntraFrameRequest(kSsrc);
-
-  const uint8_t sli_picture_id = 3;
-  EXPECT_CALL(encoder_, OnReceivedSLI(sli_picture_id)).Times(1);
-  encoder_rtcp_feedback_.OnReceivedSLI(kSsrc, sli_picture_id);
-
-  const uint64_t rpsi_picture_id = 9;
-  EXPECT_CALL(encoder_, OnReceivedRPSI(rpsi_picture_id)).Times(1);
-  encoder_rtcp_feedback_.OnReceivedRPSI(kSsrc, rpsi_picture_id);
 }
 
 TEST_F(VieKeyRequestTest, TooManyOnReceivedIntraFrameRequest) {

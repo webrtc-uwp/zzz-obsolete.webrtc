@@ -14,7 +14,9 @@
 
 #include <string.h>
 
-#include "webrtc/base/checks.h"
+#include "webrtc/modules/desktop_capture/desktop_geometry.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/ptr_util.h"
 
 namespace webrtc {
 
@@ -22,14 +24,26 @@ DesktopFrame::DesktopFrame(DesktopSize size,
                            int stride,
                            uint8_t* data,
                            SharedMemory* shared_memory)
+    : DesktopFrame(DesktopRect::MakeSize(size),
+                   stride,
+                   data,
+                   shared_memory) {}
+
+DesktopFrame::DesktopFrame(DesktopRect rect,
+                           int stride,
+                           uint8_t* data,
+                           SharedMemory* shared_memory)
     : data_(data),
       shared_memory_(shared_memory),
-      size_(size),
+      rect_(rect),
       stride_(stride),
-      capture_time_ms_(0) {
+      capture_time_ms_(0),
+      capturer_id_(DesktopCapturerId::kUnknown) {
+  RTC_DCHECK(rect.width() >= 0);
+  RTC_DCHECK(rect.height() >= 0);
 }
 
-DesktopFrame::~DesktopFrame() {}
+DesktopFrame::~DesktopFrame() = default;
 
 void DesktopFrame::CopyPixelsFrom(const uint8_t* src_buffer, int src_stride,
                                   const DesktopRect& dest_rect) {
@@ -58,10 +72,12 @@ uint8_t* DesktopFrame::GetFrameDataAtPos(const DesktopVector& pos) const {
 }
 
 BasicDesktopFrame::BasicDesktopFrame(DesktopSize size)
-    : DesktopFrame(size, kBytesPerPixel * size.width(),
-                   new uint8_t[kBytesPerPixel * size.width() * size.height()],
-                   NULL) {
-}
+    : BasicDesktopFrame(DesktopRect::MakeSize(size)) {}
+
+BasicDesktopFrame::BasicDesktopFrame(DesktopRect rect)
+    : DesktopFrame(rect, kBytesPerPixel * rect.width(),
+                   new uint8_t[kBytesPerPixel * rect.width() * rect.height()],
+                   nullptr) {}
 
 BasicDesktopFrame::~BasicDesktopFrame() {
   delete[] data_;
@@ -76,6 +92,7 @@ DesktopFrame* BasicDesktopFrame::CopyOf(const DesktopFrame& frame) {
   }
   result->set_dpi(frame.dpi());
   result->set_capture_time_ms(frame.capture_time_ms());
+  result->set_capturer_id(frame.capturer_id());
   *result->mutable_updated_region() = frame.updated_region();
   return result;
 }
@@ -84,29 +101,45 @@ DesktopFrame* BasicDesktopFrame::CopyOf(const DesktopFrame& frame) {
 std::unique_ptr<DesktopFrame> SharedMemoryDesktopFrame::Create(
     DesktopSize size,
     SharedMemoryFactory* shared_memory_factory) {
-  size_t buffer_size = size.height() * size.width() * kBytesPerPixel;
+  return Create(DesktopRect::MakeSize(size), shared_memory_factory);
+}
+
+// static
+std::unique_ptr<DesktopFrame> SharedMemoryDesktopFrame::Create(
+    DesktopRect rect,
+    SharedMemoryFactory* shared_memory_factory) {
+  RTC_DCHECK(shared_memory_factory);
+
+  size_t buffer_size = rect.height() * rect.width() * kBytesPerPixel;
   std::unique_ptr<SharedMemory> shared_memory =
       shared_memory_factory->CreateSharedMemory(buffer_size);
   if (!shared_memory)
     return nullptr;
 
-  return Create(size, std::move(shared_memory));
-}
-
-// static
-std::unique_ptr<DesktopFrame> SharedMemoryDesktopFrame::Create(
-    DesktopSize size,
-    std::unique_ptr<SharedMemory> shared_memory) {
-  RTC_DCHECK(shared_memory);
-  int stride = size.width() * kBytesPerPixel;
-  return std::unique_ptr<DesktopFrame>(new SharedMemoryDesktopFrame(
-      size, stride, shared_memory.release()));
+  return rtc::MakeUnique<SharedMemoryDesktopFrame>(
+      rect, rect.width() * kBytesPerPixel, std::move(shared_memory));
 }
 
 SharedMemoryDesktopFrame::SharedMemoryDesktopFrame(DesktopSize size,
                                                    int stride,
                                                    SharedMemory* shared_memory)
-    : DesktopFrame(size,
+    : SharedMemoryDesktopFrame(DesktopRect::MakeSize(size),
+                               stride,
+                               shared_memory) {}
+
+SharedMemoryDesktopFrame::SharedMemoryDesktopFrame(
+    DesktopRect rect,
+    int stride,
+    std::unique_ptr<SharedMemory> shared_memory)
+    : SharedMemoryDesktopFrame(rect,
+                               stride,
+                               shared_memory.release()) {}
+
+SharedMemoryDesktopFrame::SharedMemoryDesktopFrame(
+    DesktopRect rect,
+    int stride,
+    SharedMemory* shared_memory)
+    : DesktopFrame(rect,
                    stride,
                    reinterpret_cast<uint8_t*>(shared_memory->data()),
                    shared_memory) {}

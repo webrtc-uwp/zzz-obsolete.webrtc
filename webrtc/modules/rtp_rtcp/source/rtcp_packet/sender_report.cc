@@ -10,14 +10,17 @@
 
 #include "webrtc/modules/rtp_rtcp/source/rtcp_packet/sender_report.h"
 
-#include "webrtc/base/checks.h"
-#include "webrtc/base/logging.h"
+#include <utility>
+
 #include "webrtc/modules/rtp_rtcp/source/byte_io.h"
 #include "webrtc/modules/rtp_rtcp/source/rtcp_packet/common_header.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
 
 namespace webrtc {
 namespace rtcp {
 constexpr uint8_t SenderReport::kPacketType;
+constexpr size_t SenderReport::kMaxNumberOfReportBlocks;
 //    Sender report (SR) (RFC 3550).
 //     0                   1                   2                   3
 //     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -42,6 +45,8 @@ SenderReport::SenderReport()
       rtp_timestamp_(0),
       sender_packet_count_(0),
       sender_octet_count_(0) {}
+
+SenderReport::~SenderReport() = default;
 
 bool SenderReport::Parse(const CommonHeader& packet) {
   RTC_DCHECK_EQ(packet.type(), kPacketType);
@@ -72,6 +77,11 @@ bool SenderReport::Parse(const CommonHeader& packet) {
   RTC_DCHECK_LE(next_block - payload,
                 static_cast<ptrdiff_t>(packet.payload_size_bytes()));
   return true;
+}
+
+size_t SenderReport::BlockLength() const {
+  return kHeaderLength + kSenderBaseLength +
+         report_blocks_.size() * ReportBlock::kLength;
 }
 
 bool SenderReport::Create(uint8_t* packet,
@@ -112,6 +122,16 @@ bool SenderReport::AddReportBlock(const ReportBlock& block) {
     return false;
   }
   report_blocks_.push_back(block);
+  return true;
+}
+
+bool SenderReport::SetReportBlocks(std::vector<ReportBlock> blocks) {
+  if (blocks.size() > kMaxNumberOfReportBlocks) {
+    LOG(LS_WARNING) << "Too many report blocks (" << blocks.size()
+                    << ") for sender report.";
+    return false;
+  }
+  report_blocks_ = std::move(blocks);
   return true;
 }
 

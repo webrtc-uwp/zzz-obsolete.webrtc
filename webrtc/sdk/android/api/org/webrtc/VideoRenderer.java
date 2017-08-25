@@ -61,13 +61,7 @@ public class VideoRenderer {
       // top-left corner of the image, but in glTexImage2D() the first element corresponds to the
       // bottom-left corner. This discrepancy is corrected by setting a vertical flip as sampling
       // matrix.
-      // clang-format off
-      samplingMatrix = new float[] {
-          1,  0, 0, 0,
-          0, -1, 0, 0,
-          0,  0, 1, 0,
-          0,  1, 0, 1};
-      // clang-format on
+      samplingMatrix = RendererCommon.verticalFlipMatrix();
     }
 
     /**
@@ -89,6 +83,43 @@ public class VideoRenderer {
       }
     }
 
+    /**
+     * Construct a frame from VideoFrame.Buffer.
+     */
+    public I420Frame(int rotationDegree, VideoFrame.Buffer buffer, long nativeFramePointer) {
+      this.width = buffer.getWidth();
+      this.height = buffer.getHeight();
+      this.rotationDegree = rotationDegree;
+      if (rotationDegree % 90 != 0) {
+        throw new IllegalArgumentException("Rotation degree not multiple of 90: " + rotationDegree);
+      }
+      if (buffer instanceof VideoFrame.TextureBuffer) {
+        VideoFrame.TextureBuffer textureBuffer = (VideoFrame.TextureBuffer) buffer;
+        this.yuvFrame = false;
+        this.textureId = textureBuffer.getTextureId();
+        this.samplingMatrix = RendererCommon.convertMatrixFromAndroidGraphicsMatrix(
+            textureBuffer.getTransformMatrix());
+
+        this.yuvStrides = null;
+        this.yuvPlanes = null;
+      } else {
+        VideoFrame.I420Buffer i420Buffer = buffer.toI420();
+        this.yuvFrame = true;
+        this.yuvStrides =
+            new int[] {i420Buffer.getStrideY(), i420Buffer.getStrideU(), i420Buffer.getStrideV()};
+        this.yuvPlanes =
+            new ByteBuffer[] {i420Buffer.getDataY(), i420Buffer.getDataU(), i420Buffer.getDataV()};
+        // The convention in WebRTC is that the first element in a ByteBuffer corresponds to the
+        // top-left corner of the image, but in glTexImage2D() the first element corresponds to the
+        // bottom-left corner. This discrepancy is corrected by multiplying the sampling matrix with
+        // a vertical flip matrix.
+        this.samplingMatrix = RendererCommon.verticalFlipMatrix();
+
+        this.textureId = 0;
+      }
+      this.nativeFramePointer = nativeFramePointer;
+    }
+
     public int rotatedWidth() {
       return (rotationDegree % 180 == 0) ? width : height;
     }
@@ -99,7 +130,10 @@ public class VideoRenderer {
 
     @Override
     public String toString() {
-      return width + "x" + height + ":" + yuvStrides[0] + ":" + yuvStrides[1] + ":" + yuvStrides[2];
+      final String type = yuvFrame
+          ? "Y: " + yuvStrides[0] + ", U: " + yuvStrides[1] + ", V: " + yuvStrides[2]
+          : "Texture: " + textureId;
+      return width + "x" + height + ", " + type;
     }
   }
 

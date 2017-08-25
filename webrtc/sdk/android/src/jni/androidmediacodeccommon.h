@@ -14,11 +14,10 @@
 #include <android/log.h>
 #include <string>
 
-#include "webrtc/base/thread.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/thread.h"
 #include "webrtc/sdk/android/src/jni/classreferenceholder.h"
 #include "webrtc/sdk/android/src/jni/jni_helpers.h"
-#include "webrtc/base/logging.h"
-#include "webrtc/base/thread.h"
 
 namespace webrtc_jni {
 
@@ -69,15 +68,6 @@ static inline void AllowBlockingCalls() {
   rtc::Thread* current_thread = rtc::Thread::Current();
   if (current_thread != NULL)
     current_thread->SetAllowBlockingCalls(true);
-}
-
-// Return the (singleton) Java Enum object corresponding to |index|;
-// |state_class_fragment| is something like "MediaSource$State".
-static inline jobject JavaEnumFromIndexAndClassName(
-    JNIEnv* jni, const std::string& state_class_fragment, int index) {
-  const std::string state_class = "org/webrtc/" + state_class_fragment;
-  return JavaEnumFromIndex(jni, FindClass(jni, state_class.c_str()),
-                           state_class, index);
 }
 
 // Checks for any Java exception, prints stack backtrace and clears

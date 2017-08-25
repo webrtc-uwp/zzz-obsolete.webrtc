@@ -12,9 +12,21 @@
 
 #include "webrtc/modules/desktop_capture/cropped_desktop_frame.h"
 
-#include "webrtc/base/constructormagic.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/constructormagic.h"
 
 namespace webrtc {
+
+namespace {
+
+DesktopRect TranslateRect(const DesktopRect& rect,
+                          const DesktopVector& top_left) {
+  DesktopRect result = rect;
+  result.Translate(top_left);
+  return result;
+}
+
+}  // namespace
 
 // A DesktopFrame that is a sub-rect of another DesktopFrame.
 class CroppedDesktopFrame : public DesktopFrame {
@@ -31,8 +43,15 @@ class CroppedDesktopFrame : public DesktopFrame {
 std::unique_ptr<DesktopFrame> CreateCroppedDesktopFrame(
     std::unique_ptr<DesktopFrame> frame,
     const DesktopRect& rect) {
-  if (!DesktopRect::MakeSize(frame->size()).ContainsRect(rect))
+  RTC_DCHECK(frame);
+
+  if (!DesktopRect::MakeSize(frame->size()).ContainsRect(rect)) {
     return nullptr;
+  }
+
+  if (frame->size().equals(rect.size())) {
+    return frame;
+  }
 
   return std::unique_ptr<DesktopFrame>(
       new CroppedDesktopFrame(std::move(frame), rect));
@@ -40,7 +59,7 @@ std::unique_ptr<DesktopFrame> CreateCroppedDesktopFrame(
 
 CroppedDesktopFrame::CroppedDesktopFrame(std::unique_ptr<DesktopFrame> frame,
                                          const DesktopRect& rect)
-    : DesktopFrame(rect.size(),
+    : DesktopFrame(TranslateRect(rect, frame->top_left()),
                    frame->stride(),
                    frame->GetFrameDataAtPos(rect.top_left()),
                    frame->shared_memory()) {

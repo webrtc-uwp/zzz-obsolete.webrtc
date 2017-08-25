@@ -15,10 +15,10 @@
 #include <algorithm>
 #include <utility>
 
-#include "webrtc/base/checks.h"
-#include "webrtc/base/timeutils.h"
 #include "webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "webrtc/modules/desktop_capture/differ_block.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/timeutils.h"
 
 namespace webrtc {
 
@@ -61,7 +61,8 @@ void CompareRow(const uint8_t* old_buffer,
   const int height = bottom - top;
   const int block_count = (width - 1) / kBlockSize;
   const int last_block_width = width - block_count * kBlockSize;
-  RTC_DCHECK(last_block_width <= kBlockSize && last_block_width > 0);
+  RTC_DCHECK_GT(last_block_width, 0);
+  RTC_DCHECK_LE(last_block_width, kBlockSize);
 
   // The first block-column in a continuous dirty area in current block-row.
   int first_dirty_x_block = -1;
@@ -214,6 +215,7 @@ void DesktopCapturerDifferWrapper::OnCaptureResult(
   frame->set_capture_time_ms(frame->GetUnderlyingFrame()->capture_time_ms() +
                              (rtc::TimeNanos() - start_time_nanos) /
                                  rtc::kNumNanosecsPerMillisec);
+  frame->set_capturer_id(frame->GetUnderlyingFrame()->capturer_id());
   callback_->OnCaptureResult(result, std::move(frame));
 }
 

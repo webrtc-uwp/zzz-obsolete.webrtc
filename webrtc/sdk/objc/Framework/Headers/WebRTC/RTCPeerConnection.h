@@ -123,6 +123,7 @@ RTC_EXPORT
 @property(nonatomic, readonly) RTCSignalingState signalingState;
 @property(nonatomic, readonly) RTCIceConnectionState iceConnectionState;
 @property(nonatomic, readonly) RTCIceGatheringState iceGatheringState;
+@property(nonatomic, readonly, copy) RTCConfiguration *configuration;
 
 /** Gets all RTCRtpSenders associated with this peer connection.
  *  Note: reading this property returns different instances of RTCRtpSender.
@@ -182,6 +183,13 @@ RTC_EXPORT
 - (void)setRemoteDescription:(RTCSessionDescription *)sdp
            completionHandler:
     (nullable void (^)(NSError * _Nullable error))completionHandler;
+
+/** Updates bandwidth estimation parameters. Null parameters will be unchanged.
+ *  Returns true iff the parameters were successfully updated.
+ */
+- (BOOL)setBitrateToMin:(NSNumber *_Nullable)minBitrateBps
+              toCurrent:(NSNumber *_Nullable)currentBitrateBps
+                  toMax:(NSNumber *_Nullable)maxBitrateBps;
 
 /** Start or stop recording an Rtc EventLog. */
 - (BOOL)startRtcEventLogWithFilePath:(NSString *)filePath

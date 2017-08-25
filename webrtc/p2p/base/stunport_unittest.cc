@@ -13,12 +13,11 @@
 #include "webrtc/p2p/base/basicpacketsocketfactory.h"
 #include "webrtc/p2p/base/stunport.h"
 #include "webrtc/p2p/base/teststunserver.h"
-#include "webrtc/base/gunit.h"
-#include "webrtc/base/helpers.h"
-#include "webrtc/base/physicalsocketserver.h"
-#include "webrtc/base/socketaddress.h"
-#include "webrtc/base/ssladapter.h"
-#include "webrtc/base/virtualsocketserver.h"
+#include "webrtc/rtc_base/gunit.h"
+#include "webrtc/rtc_base/helpers.h"
+#include "webrtc/rtc_base/socketaddress.h"
+#include "webrtc/rtc_base/ssladapter.h"
+#include "webrtc/rtc_base/virtualsocketserver.h"
 
 using cricket::ServerAddresses;
 using rtc::SocketAddress;
@@ -39,15 +38,12 @@ static const int kInfiniteLifetime = -1;
 static const int kHighCostPortKeepaliveLifetimeMs = 2 * 60 * 1000;
 
 // Tests connecting a StunPort to a fake STUN server (cricket::StunServer)
-// TODO: Use a VirtualSocketServer here. We have to use a
-// PhysicalSocketServer right now since DNS is not part of SocketServer yet.
 class StunPortTestBase : public testing::Test, public sigslot::has_slots<> {
  public:
   StunPortTestBase()
-      : pss_(new rtc::PhysicalSocketServer),
-        ss_(new rtc::VirtualSocketServer(pss_.get())),
-        ss_scope_(ss_.get()),
-        network_("unittest", "unittest", rtc::IPAddress(INADDR_ANY), 32),
+      : ss_(new rtc::VirtualSocketServer()),
+        thread_(ss_.get()),
+        network_("unittest", "unittest", kLocalAddr.ipaddr(), 32),
         socket_factory_(rtc::Thread::Current()),
         stun_server_1_(cricket::TestStunServer::Create(rtc::Thread::Current(),
                                                        kStunAddr1)),
@@ -56,7 +52,9 @@ class StunPortTestBase : public testing::Test, public sigslot::has_slots<> {
         done_(false),
         error_(false),
         stun_keepalive_delay_(1),
-        stun_keepalive_lifetime_(-1) {}
+        stun_keepalive_lifetime_(-1) {
+    network_.AddIP(kLocalAddr.ipaddr());
+  }
 
   cricket::UDPPort* port() const { return stun_port_.get(); }
   bool done() const { return done_; }
@@ -74,9 +72,9 @@ class StunPortTestBase : public testing::Test, public sigslot::has_slots<> {
 
   void CreateStunPort(const ServerAddresses& stun_servers) {
     stun_port_.reset(cricket::StunPort::Create(
-        rtc::Thread::Current(), &socket_factory_, &network_,
-        kLocalAddr.ipaddr(), 0, 0, rtc::CreateRandomString(16),
-        rtc::CreateRandomString(22), stun_servers, std::string()));
+        rtc::Thread::Current(), &socket_factory_, &network_, 0, 0,
+        rtc::CreateRandomString(16), rtc::CreateRandomString(22), stun_servers,
+        std::string()));
     stun_port_->set_stun_keepalive_delay(stun_keepalive_delay_);
     // If |stun_keepalive_lifetime_| is negative, let the stun port
     // choose its lifetime from the network type.
@@ -156,9 +154,8 @@ class StunPortTestBase : public testing::Test, public sigslot::has_slots<> {
   }
 
  private:
-  std::unique_ptr<rtc::PhysicalSocketServer> pss_;
   std::unique_ptr<rtc::VirtualSocketServer> ss_;
-  rtc::SocketServerScope ss_scope_;
+  rtc::AutoSocketServerThread thread_;
   rtc::Network network_;
   rtc::BasicPacketSocketFactory socket_factory_;
   std::unique_ptr<cricket::UDPPort> stun_port_;
@@ -204,8 +201,7 @@ TEST_F(StunPortTest, TestPrepareAddress) {
   std::string expected_server_url = "stun:127.0.0.1:5000";
   EXPECT_EQ(port()->Candidates()[0].url(), expected_server_url);
 
-  // TODO: Add IPv6 tests here, once either physicalsocketserver supports
-  // IPv6, or this test is changed to use VirtualSocketServer.
+  // TODO(deadbeef): Add IPv6 tests here.
 }
 
 // Test that we fail properly if we can't get an address.
@@ -218,7 +214,13 @@ TEST_F(StunPortTest, TestPrepareAddressFail) {
 }
 
 // Test that we can get an address from a STUN server specified by a hostname.
-TEST_F(StunPortTest, TestPrepareAddressHostname) {
+// Crashes on Linux, see webrtc:7416
+#if defined(WEBRTC_LINUX)
+#define MAYBE_TestPrepareAddressHostname DISABLED_TestPrepareAddressHostname
+#else
+#define MAYBE_TestPrepareAddressHostname TestPrepareAddressHostname
+#endif
+TEST_F(StunPortTest, MAYBE_TestPrepareAddressHostname) {
   CreateStunPort(kStunHostnameAddr);
   PrepareAddress();
   EXPECT_TRUE_SIMULATED_WAIT(done(), kTimeoutMs, fake_clock);
@@ -240,7 +242,7 @@ TEST_F(StunPortTestWithRealClock, TestPrepareAddressHostnameFail) {
 // additional candidate generation.
 TEST_F(StunPortTest, TestKeepAliveResponse) {
   SetKeepaliveDelay(500);  // 500ms of keepalive delay.
-  CreateStunPort(kStunHostnameAddr);
+  CreateStunPort(kStunAddr1);
   PrepareAddress();
   EXPECT_TRUE_SIMULATED_WAIT(done(), kTimeoutMs, fake_clock);
   ASSERT_EQ(1U, port()->Candidates().size());

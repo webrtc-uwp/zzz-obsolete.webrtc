@@ -10,14 +10,14 @@
 
 #include "webrtc/modules/audio_device/linux/latebindingsymboltable_linux.h"
 
+#include "webrtc/rtc_base/logging.h"
+
 #ifdef WEBRTC_LINUX
 #include <dlfcn.h>
 #endif
 
-// TODO(grunell): Either put inside webrtc namespace or use webrtc:: instead.
-using namespace webrtc;
-
-namespace webrtc_adm_linux {
+namespace webrtc {
+namespace adm_linux {
 
 inline static const char *GetDllError() {
 #ifdef WEBRTC_LINUX
@@ -39,8 +39,7 @@ DllHandle InternalLoadDll(const char dll_name[]) {
 #error Not implemented
 #endif
   if (handle == kInvalidDllHandle) {
-    WEBRTC_TRACE(kTraceWarning, kTraceAudioDevice, -1,
-               "Can't load %s : %s", dll_name, GetDllError());
+    LOG(LS_WARNING) << "Can't load " << dll_name << " : " << GetDllError();
   }
   return handle;
 }
@@ -56,8 +55,7 @@ void InternalUnloadDll(DllHandle handle) {
 // https://code.google.com/p/address-sanitizer/issues/detail?id=89
 #if !defined(ADDRESS_SANITIZER)
   if (dlclose(handle) != 0) {
-    WEBRTC_TRACE(kTraceError, kTraceAudioDevice, -1,
-               "%s", GetDllError());
+    LOG(LS_ERROR) << GetDllError();
   }
 #endif  // !defined(ADDRESS_SANITIZER)
 #else
@@ -72,12 +70,10 @@ static bool LoadSymbol(DllHandle handle,
   *symbol = dlsym(handle, symbol_name);
   char *err = dlerror();
   if (err) {
-    WEBRTC_TRACE(kTraceError, kTraceAudioDevice, -1,
-               "Error loading symbol %s : %d", symbol_name, err);
+    LOG(LS_ERROR) << "Error loading symbol " << symbol_name << " : " << err;
     return false;
   } else if (!*symbol) {
-    WEBRTC_TRACE(kTraceError, kTraceAudioDevice, -1,
-               "Symbol %s is NULL", symbol_name);
+    LOG(LS_ERROR) << "Symbol " << symbol_name << " is NULL";
     return false;
   }
   return true;
@@ -105,4 +101,5 @@ bool InternalLoadSymbols(DllHandle handle,
   return true;
 }
 
-}  // namespace webrtc_adm_linux
+}  // namespace adm_linux
+}  // namespace webrtc

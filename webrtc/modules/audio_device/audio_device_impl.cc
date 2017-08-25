@@ -8,15 +8,14 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
-#include "webrtc/base/checks.h"
-#include "webrtc/base/logging.h"
-#include "webrtc/base/checks.h"
-#include "webrtc/base/refcount.h"
-#include "webrtc/base/timeutils.h"
+#include "webrtc/modules/audio_device/audio_device_impl.h"
 #include "webrtc/common_audio/signal_processing/include/signal_processing_library.h"
 #include "webrtc/modules/audio_device/audio_device_config.h"
 #include "webrtc/modules/audio_device/audio_device_generic.h"
-#include "webrtc/modules/audio_device/audio_device_impl.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/refcount.h"
+#include "webrtc/rtc_base/timeutils.h"
 #include "webrtc/system_wrappers/include/metrics.h"
 
 #include <assert.h>
@@ -56,7 +55,6 @@
 
 #include "webrtc/modules/audio_device/dummy/audio_device_dummy.h"
 #include "webrtc/modules/audio_device/dummy/file_audio_device.h"
-#include "webrtc/system_wrappers/include/critical_section_wrapper.h"
 
 #define CHECK_INITIALIZED() \
   {                         \
@@ -121,10 +119,7 @@ rtc::scoped_refptr<AudioDeviceModule> AudioDeviceModule::Create(
 
 AudioDeviceModuleImpl::AudioDeviceModuleImpl(const int32_t id,
                                              const AudioLayer audioLayer)
-    : _critSect(*CriticalSectionWrapper::CreateCriticalSection()),
-      _critSectEventCb(*CriticalSectionWrapper::CreateCriticalSection()),
-      _critSectAudioCb(*CriticalSectionWrapper::CreateCriticalSection()),
-      _ptrCbAudioDeviceObserver(NULL),
+    : _ptrCbAudioDeviceObserver(NULL),
       _ptrAudioDevice(NULL),
       _id(id),
       _platformAudioLayer(audioLayer),
@@ -219,7 +214,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
 
     if (AudioDeviceWindowsCore::CoreAudioIsSupported()) {
       // create *Windows Core Audio* implementation
-      ptrAudioDevice = new AudioDeviceWindowsCore(Id());
+      ptrAudioDevice = new AudioDeviceWindowsCore();
       LOG(INFO) << "Windows Core Audio APIs will be utilized";
     }
   }
@@ -276,7 +271,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
     LOG(INFO) << "attempting to use the Linux PulseAudio APIs...";
 
     // create *Linux PulseAudio* implementation
-    AudioDeviceLinuxPulse* pulseDevice = new AudioDeviceLinuxPulse(Id());
+    AudioDeviceLinuxPulse* pulseDevice = new AudioDeviceLinuxPulse();
     if (pulseDevice->Init() == AudioDeviceGeneric::InitStatus::OK) {
       ptrAudioDevice = pulseDevice;
       LOG(INFO) << "Linux PulseAudio APIs will be utilized";
@@ -285,7 +280,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
 #endif
 #if defined(LINUX_ALSA)
       // create *Linux ALSA Audio* implementation
-      ptrAudioDevice = new AudioDeviceLinuxALSA(Id());
+      ptrAudioDevice = new AudioDeviceLinuxALSA();
       if (ptrAudioDevice != NULL) {
         // Pulse Audio was not supported => revert to ALSA instead
         _platformAudioLayer =
@@ -300,7 +295,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
   } else if (audioLayer == kLinuxAlsaAudio) {
 #if defined(LINUX_ALSA)
     // create *Linux ALSA Audio* implementation
-    ptrAudioDevice = new AudioDeviceLinuxALSA(Id());
+    ptrAudioDevice = new AudioDeviceLinuxALSA();
     LOG(INFO) << "Linux ALSA APIs will be utilized";
 #endif
   }
@@ -321,7 +316,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
 #elif defined(WEBRTC_MAC)
   if (audioLayer == kPlatformDefaultAudio) {
     // Create *Mac Audio* implementation
-    ptrAudioDevice = new AudioDeviceMac(Id());
+    ptrAudioDevice = new AudioDeviceMac();
     LOG(INFO) << "Mac OS X Audio APIs will be utilized";
   }
 #endif  // WEBRTC_MAC
@@ -372,15 +367,10 @@ int32_t AudioDeviceModuleImpl::AttachAudioBuffer() {
 
 AudioDeviceModuleImpl::~AudioDeviceModuleImpl() {
   LOG(INFO) << __FUNCTION__;
-
   if (_ptrAudioDevice) {
     delete _ptrAudioDevice;
     _ptrAudioDevice = NULL;
   }
-
-  delete &_critSect;
-  delete &_critSectEventCb;
-  delete &_critSectAudioCb;
 }
 
 // ============================================================================
@@ -412,7 +402,7 @@ void AudioDeviceModuleImpl::Process() {
 
   // kPlayoutWarning
   if (_ptrAudioDevice->PlayoutWarning()) {
-    CriticalSectionScoped lock(&_critSectEventCb);
+    rtc::CritScope lock(&_critSectEventCb);
     if (_ptrCbAudioDeviceObserver) {
       LOG(WARNING) << "=> OnWarningIsReported(kPlayoutWarning)";
       _ptrCbAudioDeviceObserver->OnWarningIsReported(
@@ -423,7 +413,7 @@ void AudioDeviceModuleImpl::Process() {
 
   // kPlayoutError
   if (_ptrAudioDevice->PlayoutError()) {
-    CriticalSectionScoped lock(&_critSectEventCb);
+    rtc::CritScope lock(&_critSectEventCb);
     if (_ptrCbAudioDeviceObserver) {
       LOG(LERROR) << "=> OnErrorIsReported(kPlayoutError)";
       _ptrCbAudioDeviceObserver->OnErrorIsReported(
@@ -434,7 +424,7 @@ void AudioDeviceModuleImpl::Process() {
 
   // kRecordingWarning
   if (_ptrAudioDevice->RecordingWarning()) {
-    CriticalSectionScoped lock(&_critSectEventCb);
+    rtc::CritScope lock(&_critSectEventCb);
     if (_ptrCbAudioDeviceObserver) {
       LOG(WARNING) << "=> OnWarningIsReported(kRecordingWarning)";
       _ptrCbAudioDeviceObserver->OnWarningIsReported(
@@ -445,7 +435,7 @@ void AudioDeviceModuleImpl::Process() {
 
   // kRecordingError
   if (_ptrAudioDevice->RecordingError()) {
-    CriticalSectionScoped lock(&_critSectEventCb);
+    rtc::CritScope lock(&_critSectEventCb);
     if (_ptrCbAudioDeviceObserver) {
       LOG(LERROR) << "=> OnErrorIsReported(kRecordingError)";
       _ptrCbAudioDeviceObserver->OnErrorIsReported(
@@ -1473,7 +1463,7 @@ bool AudioDeviceModuleImpl::Recording() const {
 int32_t AudioDeviceModuleImpl::RegisterEventObserver(
     AudioDeviceObserver* eventCallback) {
   LOG(INFO) << __FUNCTION__;
-  CriticalSectionScoped lock(&_critSectEventCb);
+  rtc::CritScope lock(&_critSectEventCb);
   _ptrCbAudioDeviceObserver = eventCallback;
 
   return 0;
@@ -1486,7 +1476,7 @@ int32_t AudioDeviceModuleImpl::RegisterEventObserver(
 int32_t AudioDeviceModuleImpl::RegisterAudioCallback(
     AudioTransport* audioCallback) {
   LOG(INFO) << __FUNCTION__;
-  CriticalSectionScoped lock(&_critSectAudioCb);
+  rtc::CritScope lock(&_critSectAudioCb);
   return _audioDeviceBuffer.RegisterAudioCallback(audioCallback);
 }
 

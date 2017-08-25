@@ -4,9 +4,8 @@ include_rules = [
   "+vpx",
   "+webrtc/base",
   "+webrtc/common_video",
-  "+webrtc/media/base",
   "+webrtc/system_wrappers",
-  "+webrtc/tools",
+  "+webrtc/rtc_tools",
 ]
 
 specific_include_rules = {
@@ -14,7 +13,7 @@ specific_include_rules = {
     "+base/android",
     "+webrtc/sdk",
   ],
-  "(.*test\.cc|.*test\.h)": [
+  "(.*test\.cc|.*test\.h|.*test\.mm)": [
      "+webrtc/media/engine",
      "+webrtc/sdk",
   ],

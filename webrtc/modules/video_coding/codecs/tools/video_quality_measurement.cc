@@ -20,18 +20,18 @@
 #endif
 
 #include "gflags/gflags.h"
-#include "webrtc/base/format_macros.h"
 #include "webrtc/common_types.h"
 #include "webrtc/modules/video_coding/codecs/test/packet_manipulator.h"
 #include "webrtc/modules/video_coding/codecs/test/stats.h"
 #include "webrtc/modules/video_coding/codecs/test/videoprocessor.h"
 #include "webrtc/modules/video_coding/codecs/vp8/include/vp8.h"
 #include "webrtc/modules/video_coding/include/video_coding.h"
-#include "webrtc/system_wrappers/include/trace.h"
+#include "webrtc/rtc_base/format_macros.h"
 #include "webrtc/test/testsupport/frame_reader.h"
 #include "webrtc/test/testsupport/frame_writer.h"
 #include "webrtc/test/testsupport/metrics/video_metrics.h"
 #include "webrtc/test/testsupport/packet_reader.h"
+#include "webrtc/test/video_codec_settings.h"
 
 DEFINE_string(test_name, "Quality test", "The name of the test to run. ");
 DEFINE_string(test_description,
@@ -177,7 +177,7 @@ int HandleCommandLineFlags(webrtc::test::TestConfig* config) {
   if (FLAGS_output_filename.empty()) {
     // Cut out the filename without extension from the given input file
     // (which may include a path)
-    int startIndex = static_cast<decltype(startIndex)>(FLAGS_input_filename.find_last_of("/") + 1);
+    size_t startIndex = FLAGS_input_filename.find_last_of("/") + 1;
     if (startIndex == 0) {
       startIndex = 0;
     }
@@ -205,8 +205,7 @@ int HandleCommandLineFlags(webrtc::test::TestConfig* config) {
   config->use_single_core = FLAGS_use_single_core;
 
   // Get codec specific configuration.
-  webrtc::VideoCodingModule::Codec(webrtc::kVideoCodecVP8,
-                                   config->codec_settings);
+  webrtc::test::CodecSettings(webrtc::kVideoCodecVP8, &config->codec_settings);
 
   // Check the temporal layers.
   if (FLAGS_temporal_layers < 0 ||
@@ -215,14 +214,14 @@ int HandleCommandLineFlags(webrtc::test::TestConfig* config) {
             FLAGS_temporal_layers);
     return 13;
   }
-  config->codec_settings->VP8()->numberOfTemporalLayers = FLAGS_temporal_layers;
+  config->codec_settings.VP8()->numberOfTemporalLayers = FLAGS_temporal_layers;
 
   // Check the bit rate.
   if (FLAGS_bitrate <= 0) {
     fprintf(stderr, "Bit rate must be >0 kbps, was: %d\n", FLAGS_bitrate);
     return 5;
   }
-  config->codec_settings->startBitrate = FLAGS_bitrate;
+  config->codec_settings.startBitrate = FLAGS_bitrate;
 
   // Check the keyframe interval.
   if (FLAGS_keyframe_interval < 0) {
@@ -254,13 +253,13 @@ int HandleCommandLineFlags(webrtc::test::TestConfig* config) {
     fprintf(stderr, "Width and height must be >0.");
     return 9;
   }
-  config->codec_settings->width = FLAGS_width;
-  config->codec_settings->height = FLAGS_height;
-  config->codec_settings->maxFramerate = FLAGS_framerate;
+  config->codec_settings.width = FLAGS_width;
+  config->codec_settings.height = FLAGS_height;
+  config->codec_settings.maxFramerate = FLAGS_framerate;
 
   // Calculate the size of each frame to read (according to YUV spec).
   config->frame_length_in_bytes =
-      3 * config->codec_settings->width * config->codec_settings->height / 2;
+      3 * config->codec_settings.width * config->codec_settings.height / 2;
 
   // Check packet loss settings
   if (FLAGS_packet_loss_mode != "uniform" &&
@@ -304,7 +303,7 @@ void CalculateSsimVideoMetrics(webrtc::test::TestConfig* config,
   Log("Calculating SSIM...\n");
   I420SSIMFromFiles(
       config->input_filename.c_str(), config->output_filename.c_str(),
-      config->codec_settings->width, config->codec_settings->height, result);
+      config->codec_settings.width, config->codec_settings.height, result);
   Log("  Average: %3.2f\n", result->average);
   Log("  Min    : %3.2f (frame %d)\n", result->min, result->min_frame_number);
   Log("  Max    : %3.2f (frame %d)\n", result->max, result->max_frame_number);
@@ -315,7 +314,7 @@ void CalculatePsnrVideoMetrics(webrtc::test::TestConfig* config,
   Log("Calculating PSNR...\n");
   I420PSNRFromFiles(
       config->input_filename.c_str(), config->output_filename.c_str(),
-      config->codec_settings->width, config->codec_settings->height, result);
+      config->codec_settings.width, config->codec_settings.height, result);
   Log("  Average: %3.2f\n", result->average);
   Log("  Min    : %3.2f (frame %d)\n", result->min, result->min_frame_number);
   Log("  Max    : %3.2f (frame %d)\n", result->max, result->max_frame_number);
@@ -412,10 +411,10 @@ void PrintPythonOutput(const webrtc::test::TestConfig& config,
       ExcludeFrameTypesToStr(config.exclude_frame_types),
       config.frame_length_in_bytes, config.use_single_core ? "True " : "False",
       config.keyframe_interval,
-      CodecTypeToPayloadName(config.codec_settings->codecType)
+      CodecTypeToPayloadName(config.codec_settings.codecType)
           .value_or("Unknown"),
-      config.codec_settings->width, config.codec_settings->height,
-      config.codec_settings->startBitrate);
+      config.codec_settings.width, config.codec_settings.height,
+      config.codec_settings.startBitrate);
   printf(
       "frame_data_types = {"
       "'frame_number': ('number', 'Frame number'),\n"
@@ -474,10 +473,8 @@ int main(int argc, char* argv[]) {
 
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  // Create TestConfig and codec settings struct.
+  // Create TestConfig.
   webrtc::test::TestConfig config;
-  webrtc::VideoCodec codec_settings;
-  config.codec_settings = &codec_settings;
 
   int return_code = HandleCommandLineFlags(&config);
   // Exit if an invalid argument is supplied.
@@ -491,11 +488,11 @@ int main(int argc, char* argv[]) {
   webrtc::VP8Decoder* decoder = webrtc::VP8Decoder::Create();
   webrtc::test::Stats stats;
   webrtc::test::YuvFrameReaderImpl frame_reader(config.input_filename,
-                                                config.codec_settings->width,
-                                                config.codec_settings->height);
+                                                config.codec_settings.width,
+                                                config.codec_settings.height);
   webrtc::test::YuvFrameWriterImpl frame_writer(config.output_filename,
-                                                config.codec_settings->width,
-                                                config.codec_settings->height);
+                                                config.codec_settings.width,
+                                                config.codec_settings.height);
   frame_reader.Init();
   frame_writer.Init();
   webrtc::test::PacketReader packet_reader;
@@ -507,12 +504,10 @@ int main(int argc, char* argv[]) {
   if (FLAGS_disable_fixed_random_seed) {
     packet_manipulator.InitializeRandomSeed(time(NULL));
   }
-  webrtc::test::VideoProcessor* processor =
-      new webrtc::test::VideoProcessorImpl(
-          encoder, decoder, &frame_reader, &frame_writer, &packet_manipulator,
-          config, &stats, nullptr /* source_frame_writer */,
-          nullptr /* encoded_frame_writer */,
-          nullptr /* decoded_frame_writer */);
+  webrtc::test::VideoProcessor* processor = new webrtc::test::VideoProcessor(
+      encoder, decoder, &frame_reader, &frame_writer, &packet_manipulator,
+      config, &stats, nullptr /* encoded_frame_writer */,
+      nullptr /* decoded_frame_writer */);
   processor->Init();
 
   int frame_number = 0;

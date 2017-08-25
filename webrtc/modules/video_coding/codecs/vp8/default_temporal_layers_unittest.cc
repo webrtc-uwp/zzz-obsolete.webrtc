@@ -8,9 +8,10 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
+#include "webrtc/modules/video_coding/codecs/vp8/default_temporal_layers.h"
 #include "vpx/vp8cx.h"
 #include "vpx/vpx_encoder.h"
-#include "webrtc/modules/video_coding/codecs/vp8/default_temporal_layers.h"
+#include "webrtc/modules/video_coding/codecs/vp8/vp8_impl.h"
 #include "webrtc/modules/video_coding/include/video_codec_interface.h"
 #include "webrtc/test/gtest.h"
 
@@ -83,10 +84,14 @@ TEST(TemporalLayersTest, 2Layers) {
 
   uint32_t timestamp = 0;
   for (int i = 0; i < 16; ++i) {
-    EXPECT_EQ(expected_flags[i], tl.EncodeFlags(timestamp));
-    tl.PopulateCodecSpecific(false, &vp8_info, 0);
+    TemporalLayers::FrameConfig tl_config = tl.UpdateLayerConfig(timestamp);
+    EXPECT_EQ(expected_flags[i], VP8EncoderImpl::EncodeFlags(tl_config));
+    tl.PopulateCodecSpecific(false, tl_config, &vp8_info, 0);
     EXPECT_EQ(expected_temporal_idx[i], vp8_info.temporalIdx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.packetizer_temporal_idx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.encoder_layer_id);
     EXPECT_EQ(expected_layer_sync[i], vp8_info.layerSync);
+    EXPECT_EQ(expected_layer_sync[i], tl_config.layer_sync);
     timestamp += 3000;
   }
 }
@@ -125,10 +130,14 @@ TEST(TemporalLayersTest, 3Layers) {
 
   unsigned int timestamp = 0;
   for (int i = 0; i < 16; ++i) {
-    EXPECT_EQ(expected_flags[i], tl.EncodeFlags(timestamp));
-    tl.PopulateCodecSpecific(false, &vp8_info, 0);
+    TemporalLayers::FrameConfig tl_config = tl.UpdateLayerConfig(timestamp);
+    EXPECT_EQ(expected_flags[i], VP8EncoderImpl::EncodeFlags(tl_config));
+    tl.PopulateCodecSpecific(false, tl_config, &vp8_info, 0);
     EXPECT_EQ(expected_temporal_idx[i], vp8_info.temporalIdx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.packetizer_temporal_idx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.encoder_layer_id);
     EXPECT_EQ(expected_layer_sync[i], vp8_info.layerSync);
+    EXPECT_EQ(expected_layer_sync[i], tl_config.layer_sync);
     timestamp += 3000;
   }
 }
@@ -166,10 +175,14 @@ TEST(TemporalLayersTest, 4Layers) {
 
   uint32_t timestamp = 0;
   for (int i = 0; i < 16; ++i) {
-    EXPECT_EQ(expected_flags[i], tl.EncodeFlags(timestamp));
-    tl.PopulateCodecSpecific(false, &vp8_info, 0);
+    TemporalLayers::FrameConfig tl_config = tl.UpdateLayerConfig(timestamp);
+    EXPECT_EQ(expected_flags[i], VP8EncoderImpl::EncodeFlags(tl_config));
+    tl.PopulateCodecSpecific(false, tl_config, &vp8_info, 0);
     EXPECT_EQ(expected_temporal_idx[i], vp8_info.temporalIdx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.packetizer_temporal_idx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.encoder_layer_id);
     EXPECT_EQ(expected_layer_sync[i], vp8_info.layerSync);
+    EXPECT_EQ(expected_layer_sync[i], tl_config.layer_sync);
     timestamp += 3000;
   }
 }
@@ -191,19 +204,35 @@ TEST(TemporalLayersTest, KeyFrame) {
       kTemporalUpdateGoldenRefAltRef,
       kTemporalUpdateNone,
   };
-  int expected_temporal_idx[8] = {0, 0, 0, 0, 0, 0, 0, 2};
+  int expected_temporal_idx[8] = {0, 2, 1, 2, 0, 2, 1, 2};
+  bool expected_layer_sync[8] = {false, true,  true,  false,
+                                 false, false, false, false};
 
   uint32_t timestamp = 0;
   for (int i = 0; i < 7; ++i) {
-    EXPECT_EQ(expected_flags[i], tl.EncodeFlags(timestamp));
-    tl.PopulateCodecSpecific(true, &vp8_info, 0);
-    EXPECT_EQ(expected_temporal_idx[i], vp8_info.temporalIdx);
-    EXPECT_EQ(true, vp8_info.layerSync);
+    TemporalLayers::FrameConfig tl_config = tl.UpdateLayerConfig(timestamp);
+    EXPECT_EQ(expected_flags[i], VP8EncoderImpl::EncodeFlags(tl_config));
+    tl.PopulateCodecSpecific(true, tl_config, &vp8_info, 0);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.packetizer_temporal_idx);
+    EXPECT_EQ(expected_temporal_idx[i], tl_config.encoder_layer_id);
+    EXPECT_EQ(0, vp8_info.temporalIdx)
+        << "Key frame should always be packetized as layer 0";
+    EXPECT_EQ(expected_layer_sync[i], tl_config.layer_sync);
+    EXPECT_TRUE(vp8_info.layerSync) << "Key frame should be marked layer sync.";
     timestamp += 3000;
   }
-  EXPECT_EQ(expected_flags[7], tl.EncodeFlags(timestamp));
-  tl.PopulateCodecSpecific(false, &vp8_info, 0);
-  EXPECT_EQ(expected_temporal_idx[7], vp8_info.temporalIdx);
-  EXPECT_EQ(true, vp8_info.layerSync);
+  TemporalLayers::FrameConfig tl_config = tl.UpdateLayerConfig(timestamp);
+  EXPECT_EQ(expected_flags[7], VP8EncoderImpl::EncodeFlags(tl_config));
+  tl.PopulateCodecSpecific(false, tl_config, &vp8_info, 0);
+  EXPECT_NE(0, vp8_info.temporalIdx)
+      << "To test something useful, this frame should not use layer 0.";
+  EXPECT_EQ(expected_temporal_idx[7], vp8_info.temporalIdx)
+      << "Non-keyframe, should use frame temporal index.";
+  EXPECT_EQ(expected_temporal_idx[7], tl_config.packetizer_temporal_idx);
+  EXPECT_EQ(expected_temporal_idx[7], tl_config.encoder_layer_id);
+  EXPECT_FALSE(tl_config.layer_sync);
+  EXPECT_TRUE(vp8_info.layerSync) << "Frame after keyframe should always be "
+                                     "marked layer sync since it only depends "
+                                     "on the base layer.";
 }
 }  // namespace webrtc

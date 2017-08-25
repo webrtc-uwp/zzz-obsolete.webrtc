@@ -14,10 +14,10 @@
 #include <set>
 #include <utility>
 
-#include "webrtc/base/random.h"
-#include "webrtc/base/refcount.h"
 #include "webrtc/modules/video_coding/frame_object.h"
 #include "webrtc/modules/video_coding/packet_buffer.h"
+#include "webrtc/rtc_base/random.h"
+#include "webrtc/rtc_base/refcount.h"
 #include "webrtc/system_wrappers/include/clock.h"
 #include "webrtc/test/gtest.h"
 
@@ -671,6 +671,31 @@ TEST_F(TestRtpFrameReferenceFinder, Vp8Tl1SyncFrameAfterTl1Frame) {
   CheckReferencesVp8(5, 3);
 }
 
+TEST_F(TestRtpFrameReferenceFinder, Vp8DetectMissingFrame_0212) {
+  InsertVp8(1, 1, true, 1, 0, 1, false);
+  InsertVp8(2, 2, false, 2, 2, 1, true);
+  InsertVp8(3, 3, false, 3, 1, 1, true);
+  InsertVp8(4, 4, false, 4, 2, 1, false);
+
+  InsertVp8(6, 6, false, 6, 2, 2, false);
+  InsertVp8(7, 7, false, 7, 1, 2, false);
+  InsertVp8(8, 8, false, 8, 2, 2, false);
+  ASSERT_EQ(4UL, frames_from_callback_.size());
+
+  InsertVp8(5, 5, false, 5, 0, 2, false);
+  ASSERT_EQ(8UL, frames_from_callback_.size());
+
+  CheckReferencesVp8(1);
+  CheckReferencesVp8(2, 1);
+  CheckReferencesVp8(3, 1);
+  CheckReferencesVp8(4, 3, 2, 1);
+
+  CheckReferencesVp8(5, 1);
+  CheckReferencesVp8(6, 5, 4, 3);
+  CheckReferencesVp8(7, 5, 3);
+  CheckReferencesVp8(8, 7, 6, 5);
+}
+
 TEST_F(TestRtpFrameReferenceFinder, Vp9GofInsertOneFrame) {
   uint16_t pid = Rand();
   uint16_t sn = Rand();
@@ -1281,234 +1306,6 @@ TEST_F(TestRtpFrameReferenceFinder, Vp9FlexibleModeTwoSpatialLayersReordered) {
   CheckReferencesVp9(pid + 7, 1, pid + 6);
   CheckReferencesVp9(pid + 8, 0, pid + 6);
   CheckReferencesVp9(pid + 8, 1, pid + 7);
-}
-
-// TODO(philipel): Remove when VP9 PID/TL0 does not jump mid-stream (should be
-//                 around M59).
-TEST_F(TestRtpFrameReferenceFinder, Vp9PidFix_PidJumpsForwardNoTl0PicIdx) {
-  GofInfoVP9 ss;
-  ss.SetGofInfoVP9(kTemporalStructureMode1);
-
-  VCMPacket packet;
-  packet.timestamp = 0;
-  packet.codec = kVideoCodecVP9;
-  packet.frameType = kVideoFrameKey;
-  packet.markerBit = true;
-  packet.video_header.codecHeader.VP9.flexible_mode = false;
-  packet.video_header.codecHeader.VP9.picture_id = 0;
-  packet.video_header.codecHeader.VP9.temporal_idx = kNoTemporalIdx;
-  packet.video_header.codecHeader.VP9.spatial_idx = kNoSpatialIdx;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = kNoTl0PicIdx;
-  packet.video_header.codecHeader.VP9.temporal_up_switch = true;
-  packet.video_header.codecHeader.VP9.ss_data_available = true;
-  packet.video_header.codecHeader.VP9.gof = ss;
-
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 1;
-  packet.video_header.codecHeader.VP9.picture_id = 5000;
-
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  ASSERT_EQ(2UL, frames_from_callback_.size());
-  CheckReferencesVp9(0, 0);
-  CheckReferencesVp9(128, 0);
-}
-
-// TODO(philipel): Remove when VP9 PID/TL0 does not jump mid-stream (should be
-//                 around M59).
-TEST_F(TestRtpFrameReferenceFinder, Vp9PidFix_PidJumpsBackwardThenForward) {
-  GofInfoVP9 ss;
-  ss.SetGofInfoVP9(kTemporalStructureMode1);
-
-  VCMPacket packet;
-  packet.timestamp = 0;
-  packet.codec = kVideoCodecVP9;
-  packet.frameType = kVideoFrameKey;
-  packet.markerBit = true;
-  packet.video_header.codecHeader.VP9.flexible_mode = false;
-  packet.video_header.codecHeader.VP9.picture_id = 1;
-  packet.video_header.codecHeader.VP9.temporal_idx = 0;
-  packet.video_header.codecHeader.VP9.spatial_idx = 0;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 0;
-  packet.video_header.codecHeader.VP9.temporal_up_switch = true;
-  packet.video_header.codecHeader.VP9.ss_data_available = true;
-  packet.video_header.codecHeader.VP9.gof = ss;
-
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  // Timestamp goes forward but pid goes backwards.
-  packet.timestamp = 1;
-  packet.video_header.codecHeader.VP9.picture_id = 0;
-
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 2;
-  packet.video_header.codecHeader.VP9.picture_id = 5000;
-
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  ASSERT_EQ(3UL, frames_from_callback_.size());
-  CheckReferencesVp9(1, 0);
-  CheckReferencesVp9(129, 0);
-  CheckReferencesVp9(257, 0);
-}
-
-// TODO(philipel): Remove when VP9 PID/TL0 does not jump mid-stream (should be
-//                 around M59).
-TEST_F(TestRtpFrameReferenceFinder, Vp9PidFix_Tl0JumpsBackwardThenForward) {
-  GofInfoVP9 ss;
-  ss.SetGofInfoVP9(kTemporalStructureMode1);
-
-  VCMPacket packet;
-  packet.timestamp = 0;
-  packet.codec = kVideoCodecVP9;
-  packet.frameType = kVideoFrameKey;
-  packet.markerBit = true;
-  packet.video_header.codecHeader.VP9.flexible_mode = false;
-  packet.video_header.codecHeader.VP9.picture_id = 0;
-  packet.video_header.codecHeader.VP9.temporal_idx = 0;
-  packet.video_header.codecHeader.VP9.spatial_idx = 0;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 1;
-  packet.video_header.codecHeader.VP9.temporal_up_switch = true;
-  packet.video_header.codecHeader.VP9.ss_data_available = true;
-  packet.video_header.codecHeader.VP9.gof = ss;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 1;
-  packet.video_header.codecHeader.VP9.picture_id = 1;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 0;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 2;
-  packet.frameType = kVideoFrameDelta;
-  packet.video_header.codecHeader.VP9.picture_id = 2;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 2;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 3;
-  packet.frameType = kVideoFrameKey;
-  packet.video_header.codecHeader.VP9.ss_data_available = true;
-  packet.video_header.codecHeader.VP9.picture_id = 3;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 129;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  ASSERT_EQ(4UL, frames_from_callback_.size());
-  CheckReferencesVp9(0, 0);
-  CheckReferencesVp9(128, 0);
-  CheckReferencesVp9(129, 0, 128);
-  CheckReferencesVp9(257, 0);
-}
-
-// TODO(philipel): Remove when VP9 PID/TL0 does not jump mid-stream (should be
-//                 around M59).
-TEST_F(TestRtpFrameReferenceFinder, Vp9PidFix_PidSmallJumpForward) {
-  GofInfoVP9 ss;
-  ss.SetGofInfoVP9(kTemporalStructureMode1);
-
-  VCMPacket packet;
-  packet.timestamp = 0;
-  packet.codec = kVideoCodecVP9;
-  packet.frameType = kVideoFrameKey;
-  packet.markerBit = true;
-  packet.video_header.codecHeader.VP9.flexible_mode = false;
-  packet.video_header.codecHeader.VP9.picture_id = 1;
-  packet.video_header.codecHeader.VP9.temporal_idx = 0;
-  packet.video_header.codecHeader.VP9.spatial_idx = 0;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 1;
-  packet.video_header.codecHeader.VP9.temporal_up_switch = true;
-  packet.video_header.codecHeader.VP9.ss_data_available = true;
-  packet.video_header.codecHeader.VP9.gof = ss;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 1;
-  packet.video_header.codecHeader.VP9.picture_id = 2;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 2;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 2;
-  packet.video_header.codecHeader.VP9.picture_id = 3;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 2;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 2;
-  packet.video_header.codecHeader.VP9.picture_id = 4;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 1;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  ASSERT_EQ(4UL, frames_from_callback_.size());
-  CheckReferencesVp9(1, 0);
-  CheckReferencesVp9(2, 0);
-  CheckReferencesVp9(3, 0);
-  CheckReferencesVp9(131, 0);
-}
-
-// TODO(philipel): Remove when VP9 PID/TL0 does not jump mid-stream (should be
-//                 around M59).
-TEST_F(TestRtpFrameReferenceFinder, Vp9PidFix_DropOldFrame) {
-  GofInfoVP9 ss;
-  ss.SetGofInfoVP9(kTemporalStructureMode1);
-
-  VCMPacket packet;
-  packet.timestamp = 0;
-  packet.codec = kVideoCodecVP9;
-  packet.frameType = kVideoFrameKey;
-  packet.markerBit = true;
-  packet.video_header.codecHeader.VP9.flexible_mode = false;
-  packet.video_header.codecHeader.VP9.picture_id = 1;
-  packet.video_header.codecHeader.VP9.temporal_idx = 0;
-  packet.video_header.codecHeader.VP9.spatial_idx = 0;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 1;
-  packet.video_header.codecHeader.VP9.temporal_up_switch = true;
-  packet.video_header.codecHeader.VP9.ss_data_available = true;
-  packet.video_header.codecHeader.VP9.gof = ss;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 1;
-  packet.video_header.codecHeader.VP9.picture_id = 0;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 2;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  packet.timestamp = 0;
-  packet.video_header.codecHeader.VP9.picture_id = 3;
-  packet.video_header.codecHeader.VP9.tl0_pic_idx = 2;
-  ref_packet_buffer_->InsertPacket(&packet);
-  reference_finder_->ManageFrame(std::unique_ptr<RtpFrameObject>(
-      new RtpFrameObject(ref_packet_buffer_, 0, 0, 0, 0, 0)));
-
-  ASSERT_EQ(2UL, frames_from_callback_.size());
-  CheckReferencesVp9(1, 0);
-  CheckReferencesVp9(129, 0);
 }
 
 }  // namespace video_coding

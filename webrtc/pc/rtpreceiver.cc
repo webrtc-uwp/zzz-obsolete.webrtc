@@ -12,9 +12,9 @@
 
 #include "webrtc/api/mediastreamtrackproxy.h"
 #include "webrtc/api/videosourceproxy.h"
-#include "webrtc/base/trace_event.h"
 #include "webrtc/pc/audiotrack.h"
 #include "webrtc/pc/videotrack.h"
+#include "webrtc/rtc_base/trace_event.h"
 
 namespace webrtc {
 
@@ -53,7 +53,8 @@ void AudioRtpReceiver::OnChanged() {
 }
 
 void AudioRtpReceiver::OnSetVolume(double volume) {
-  RTC_DCHECK(volume >= 0 && volume <= 10);
+  RTC_DCHECK_GE(volume, 0);
+  RTC_DCHECK_LE(volume, 10);
   cached_volume_ = volume;
   if (!channel_) {
     LOG(LS_ERROR) << "AudioRtpReceiver::OnSetVolume: No audio channel exists.";
@@ -95,6 +96,10 @@ void AudioRtpReceiver::Stop() {
     channel_->SetOutputVolume(ssrc_, 0);
   }
   stopped_ = true;
+}
+
+std::vector<RtpSource> AudioRtpReceiver::GetSources() const {
+  return channel_->GetSources(ssrc_);
 }
 
 void AudioRtpReceiver::Reconfigure() {
@@ -151,7 +156,8 @@ VideoRtpReceiver::VideoRtpReceiver(const std::string& track_id,
               track_id,
               VideoTrackSourceProxy::Create(rtc::Thread::Current(),
                                             worker_thread,
-                                            source_)))) {
+                                            source_),
+              worker_thread))) {
   source_->SetState(MediaSourceInterface::kLive);
   if (!channel_) {
     LOG(LS_ERROR)

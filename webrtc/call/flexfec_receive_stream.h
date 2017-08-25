@@ -17,12 +17,15 @@
 #include <vector>
 
 #include "webrtc/api/call/transport.h"
+#include "webrtc/call/rtp_packet_sink_interface.h"
 #include "webrtc/config.h"
 
 namespace webrtc {
 
-class FlexfecReceiveStream {
+class FlexfecReceiveStream : public RtpPacketSinkInterface {
  public:
+  ~FlexfecReceiveStream() override = default;
+
   struct Stats {
     std::string ToString(int64_t time_ms) const;
 
@@ -82,8 +85,7 @@ class FlexfecReceiveStream {
 
   virtual Stats GetStats() const = 0;
 
- protected:
-  virtual ~FlexfecReceiveStream() = default;
+  virtual const Config& GetConfig() const = 0;
 };
 
 }  // namespace webrtc

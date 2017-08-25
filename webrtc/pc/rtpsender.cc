@@ -11,10 +11,10 @@
 #include "webrtc/pc/rtpsender.h"
 
 #include "webrtc/api/mediastreaminterface.h"
-#include "webrtc/base/checks.h"
-#include "webrtc/base/helpers.h"
-#include "webrtc/base/trace_event.h"
 #include "webrtc/pc/localaudiosource.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/helpers.h"
+#include "webrtc/rtc_base/trace_event.h"
 
 namespace webrtc {
 
@@ -243,7 +243,8 @@ void AudioRtpSender::Stop() {
 }
 
 void AudioRtpSender::SetAudioSend() {
-  RTC_DCHECK(!stopped_ && can_send_track());
+  RTC_DCHECK(!stopped_);
+  RTC_DCHECK(can_send_track());
   if (!channel_) {
     LOG(LS_ERROR) << "SetAudioSend: No audio channel exists.";
     return;
@@ -430,7 +431,8 @@ void VideoRtpSender::Stop() {
 }
 
 void VideoRtpSender::SetVideoSend() {
-  RTC_DCHECK(!stopped_ && can_send_track());
+  RTC_DCHECK(!stopped_);
+  RTC_DCHECK(can_send_track());
   if (!channel_) {
     LOG(LS_ERROR) << "SetVideoSend: No video channel exists.";
     return;

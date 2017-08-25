@@ -15,9 +15,9 @@
 
 #include <algorithm>
 
-#include "webrtc/base/checks.h"
 #include "webrtc/modules/rtp_rtcp/source/fec_private_tables_bursty.h"
 #include "webrtc/modules/rtp_rtcp/source/fec_private_tables_random.h"
+#include "webrtc/rtc_base/checks.h"
 
 namespace {
 using webrtc::fec_private_tables::kPacketMaskBurstyTbl;
@@ -179,7 +179,8 @@ FecMaskType PacketMaskTable::InitMaskType(FecMaskType fec_mask_type,
 
 // Returns the pointer to the packet mask tables corresponding to type
 // |fec_mask_type|.
-const uint8_t*** PacketMaskTable::InitMaskTable(FecMaskType fec_mask_type) {
+const uint8_t* const* const* PacketMaskTable::InitMaskTable(
+    FecMaskType fec_mask_type) {
   switch (fec_mask_type) {
     case kFecMaskRandom: {
       return kPacketMaskRandomTbl;

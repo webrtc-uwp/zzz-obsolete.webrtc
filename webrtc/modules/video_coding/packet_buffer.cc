@@ -14,10 +14,11 @@
 #include <limits>
 #include <utility>
 
-#include "webrtc/base/atomicops.h"
-#include "webrtc/base/checks.h"
-#include "webrtc/base/logging.h"
+#include "webrtc/common_video/h264/h264_common.h"
 #include "webrtc/modules/video_coding/frame_object.h"
+#include "webrtc/rtc_base/atomicops.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
 #include "webrtc/system_wrappers/include/clock.h"
 
 namespace webrtc {
@@ -59,6 +60,7 @@ bool PacketBuffer::InsertPacket(VCMPacket* packet) {
   std::vector<std::unique_ptr<RtpFrameObject>> found_frames;
   {
     rtc::CritScope lock(&crit_);
+
     uint16_t seq_num = packet->seqNum;
     size_t index = seq_num % size_;
 
@@ -107,6 +109,13 @@ bool PacketBuffer::InsertPacket(VCMPacket* packet) {
     data_buffer_[index] = *packet;
     packet->dataPtr = nullptr;
 
+    UpdateMissingPackets(packet->seqNum);
+
+    int64_t now_ms = clock_->TimeInMilliseconds();
+    last_received_packet_ms_ = rtc::Optional<int64_t>(now_ms);
+    if (packet->frameType == kVideoFrameKey)
+      last_received_keyframe_packet_ms_ = rtc::Optional<int64_t>(now_ms);
+
     found_frames = FindFrames(seq_num);
   }
 
@@ -118,19 +127,39 @@ bool PacketBuffer::InsertPacket(VCMPacket* packet) {
 
 void PacketBuffer::ClearTo(uint16_t seq_num) {
   rtc::CritScope lock(&crit_);
+  // We have already cleared past this sequence number, no need to do anything.
+  if (is_cleared_to_first_seq_num_ &&
+      AheadOf<uint16_t>(first_seq_num_, seq_num)) {
+    return;
+  }
 
   // If the packet buffer was cleared between a frame was created and returned.
   if (!first_packet_received_)
     return;
 
-  is_cleared_to_first_seq_num_ = true;
-  while (AheadOrAt<uint16_t>(seq_num, first_seq_num_)) {
+  // Avoid iterating over the buffer more than once by capping the number of
+  // iterations to the |size_| of the buffer.
+  ++seq_num;
+  size_t diff = ForwardDiff<uint16_t>(first_seq_num_, seq_num);
+  size_t iterations = std::min(diff, size_);
+  for (size_t i = 0; i < iterations; ++i) {
     size_t index = first_seq_num_ % size_;
-    delete[] data_buffer_[index].dataPtr;
-    data_buffer_[index].dataPtr = nullptr;
-    sequence_buffer_[index].used = false;
+    RTC_DCHECK_EQ(data_buffer_[index].seqNum, sequence_buffer_[index].seq_num);
+    if (AheadOf<uint16_t>(seq_num, sequence_buffer_[index].seq_num)) {
+      delete[] data_buffer_[index].dataPtr;
+      data_buffer_[index].dataPtr = nullptr;
+      sequence_buffer_[index].used = false;
+    }
     ++first_seq_num_;
   }
+
+  // If |diff| is larger than |iterations| it means that we don't increment
+  // |first_seq_num_| until we reach |seq_num|, so we set it here.
+  first_seq_num_ = seq_num;
+
+  is_cleared_to_first_seq_num_ = true;
+  missing_packets_.erase(missing_packets_.begin(),
+                         missing_packets_.upper_bound(seq_num));
 }
 
 void PacketBuffer::Clear() {
@@ -143,12 +172,39 @@ void PacketBuffer::Clear() {
 
   first_packet_received_ = false;
   is_cleared_to_first_seq_num_ = false;
+  last_received_packet_ms_.reset();
+  last_received_keyframe_packet_ms_.reset();
+  newest_inserted_seq_num_.reset();
+  missing_packets_.clear();
+}
+
+void PacketBuffer::PaddingReceived(uint16_t seq_num) {
+  std::vector<std::unique_ptr<RtpFrameObject>> found_frames;
+  {
+    rtc::CritScope lock(&crit_);
+    UpdateMissingPackets(seq_num);
+    found_frames = FindFrames(static_cast<uint16_t>(seq_num + 1));
+  }
+
+  for (std::unique_ptr<RtpFrameObject>& frame : found_frames)
+    received_frame_callback_->OnReceivedFrame(std::move(frame));
+}
+
+rtc::Optional<int64_t> PacketBuffer::LastReceivedPacketMs() const {
+  rtc::CritScope lock(&crit_);
+  return last_received_packet_ms_;
+}
+
+rtc::Optional<int64_t> PacketBuffer::LastReceivedKeyframePacketMs() const {
+  rtc::CritScope lock(&crit_);
+  return last_received_keyframe_packet_ms_;
 }
 
 bool PacketBuffer::ExpandBufferSize() {
   if (size_ == max_size_) {
     LOG(LS_WARNING) << "PacketBuffer is already at max size (" << max_size_
-                    << "), failed to increase size.";
+                    << "), failed to increase size. Clearing PacketBuffer.";
+    Clear();
     return false;
   }
 
@@ -175,6 +231,8 @@ bool PacketBuffer::PotentialNewFrame(uint16_t seq_num) const {
 
   if (!sequence_buffer_[index].used)
     return false;
+  if (sequence_buffer_[index].seq_num != seq_num)
+    return false;
   if (sequence_buffer_[index].frame_created)
     return false;
   if (sequence_buffer_[index].frame_begin)
@@ -196,8 +254,7 @@ bool PacketBuffer::PotentialNewFrame(uint16_t seq_num) const {
 std::vector<std::unique_ptr<RtpFrameObject>> PacketBuffer::FindFrames(
     uint16_t seq_num) {
   std::vector<std::unique_ptr<RtpFrameObject>> found_frames;
-  size_t packets_tested = 0;
-  while (packets_tested < size_ && PotentialNewFrame(seq_num)) {
+  for (size_t i = 0; i < size_ && PotentialNewFrame(seq_num); ++i) {
     size_t index = seq_num % size_;
     sequence_buffer_[index].continuous = true;
 
@@ -211,16 +268,34 @@ std::vector<std::unique_ptr<RtpFrameObject>> PacketBuffer::FindFrames(
       // Find the start index by searching backward until the packet with
       // the |frame_begin| flag is set.
       int start_index = index;
+      size_t tested_packets = 0;
 
       bool is_h264 = data_buffer_[start_index].codec == kVideoCodecH264;
+      bool is_h264_keyframe = false;
       int64_t frame_timestamp = data_buffer_[start_index].timestamp;
+
       while (true) {
+        ++tested_packets;
         frame_size += data_buffer_[start_index].sizeBytes;
         max_nack_count =
             std::max(max_nack_count, data_buffer_[start_index].timesNacked);
         sequence_buffer_[start_index].frame_created = true;
 
         if (!is_h264 && sequence_buffer_[start_index].frame_begin)
+          break;
+
+        if (is_h264 && !is_h264_keyframe) {
+          const RTPVideoHeaderH264& header =
+              data_buffer_[start_index].video_header.codecHeader.H264;
+          for (size_t i = 0; i < header.nalus_length; ++i) {
+            if (header.nalus[i].type == H264::NaluType::kIdr) {
+              is_h264_keyframe = true;
+              break;
+            }
+          }
+        }
+
+        if (tested_packets == size_)
           break;
 
         start_index = start_index > 0 ? start_index - 1 : size_ - 1;
@@ -231,12 +306,7 @@ std::vector<std::unique_ptr<RtpFrameObject>> PacketBuffer::FindFrames(
         // the timestamp of that packet is the same as this one. This may cause
         // the PacketBuffer to hand out incomplete frames.
         // See: https://bugs.chromium.org/p/webrtc/issues/detail?id=7106
-        //
-        // Since we ignore the |frame_begin| flag of the inserted packets
-        // we check that |start_index != static_cast<int>(index)| to make sure
-        // that we don't get stuck in a loop if the packet buffer is filled
-        // with packets of the same timestamp.
-        if (is_h264 && start_index != static_cast<int>(index) &&
+        if (is_h264 &&
             (!sequence_buffer_[start_index].used ||
              data_buffer_[start_index].timestamp != frame_timestamp)) {
           break;
@@ -245,12 +315,28 @@ std::vector<std::unique_ptr<RtpFrameObject>> PacketBuffer::FindFrames(
         --start_seq_num;
       }
 
+      // If this is H264 but not a keyframe, make sure there are no gaps in the
+      // packet sequence numbers up until this point.
+      if (is_h264 && !is_h264_keyframe &&
+          missing_packets_.upper_bound(start_seq_num) !=
+              missing_packets_.begin()) {
+        uint16_t stop_index = (index + 1) % size_;
+        while (start_index != stop_index) {
+          sequence_buffer_[start_index].frame_created = false;
+          start_index = (start_index + 1) % size_;
+        }
+
+        return found_frames;
+      }
+
+      missing_packets_.erase(missing_packets_.begin(),
+                             missing_packets_.upper_bound(seq_num));
+
       found_frames.emplace_back(
           new RtpFrameObject(this, start_seq_num, seq_num, frame_size,
                              max_nack_count, clock_->TimeInMilliseconds()));
     }
     ++seq_num;
-    ++packets_tested;
   }
   return found_frames;
 }
@@ -279,19 +365,30 @@ bool PacketBuffer::GetBitstream(const RtpFrameObject& frame,
   size_t index = frame.first_seq_num() % size_;
   size_t end = (frame.last_seq_num() + 1) % size_;
   uint16_t seq_num = frame.first_seq_num();
-  while (index != end) {
+  uint8_t* destination_end = destination + frame.size();
+
+  do {
     if (!sequence_buffer_[index].used ||
         sequence_buffer_[index].seq_num != seq_num) {
       return false;
     }
 
-    const uint8_t* source = data_buffer_[index].dataPtr;
+    RTC_DCHECK_EQ(data_buffer_[index].seqNum, sequence_buffer_[index].seq_num);
     size_t length = data_buffer_[index].sizeBytes;
+    if (destination + length > destination_end) {
+      LOG(LS_WARNING) << "Frame (" << frame.picture_id << ":"
+                      << static_cast<int>(frame.spatial_layer) << ")"
+                      << " bitstream buffer is not large enough.";
+      return false;
+    }
+
+    const uint8_t* source = data_buffer_[index].dataPtr;
     memcpy(destination, source, length);
     destination += length;
     index = (index + 1) % size_;
     ++seq_num;
-  }
+  } while (index != end);
+
   return true;
 }
 
@@ -314,6 +411,31 @@ int PacketBuffer::Release() const {
     delete this;
   }
   return count;
+}
+
+void PacketBuffer::UpdateMissingPackets(uint16_t seq_num) {
+  if (!newest_inserted_seq_num_)
+    newest_inserted_seq_num_ = rtc::Optional<uint16_t>(seq_num);
+
+  const int kMaxPaddingAge = 1000;
+  if (AheadOf(seq_num, *newest_inserted_seq_num_)) {
+    uint16_t old_seq_num = seq_num - kMaxPaddingAge;
+    auto erase_to = missing_packets_.lower_bound(old_seq_num);
+    missing_packets_.erase(missing_packets_.begin(), erase_to);
+
+    // Guard against inserting a large amount of missing packets if there is a
+    // jump in the sequence number.
+    if (AheadOf(old_seq_num, *newest_inserted_seq_num_))
+      *newest_inserted_seq_num_ = old_seq_num;
+
+    ++*newest_inserted_seq_num_;
+    while (AheadOf(seq_num, *newest_inserted_seq_num_)) {
+      missing_packets_.insert(*newest_inserted_seq_num_);
+      ++*newest_inserted_seq_num_;
+    }
+  } else {
+    missing_packets_.erase(seq_num);
+  }
 }
 
 }  // namespace video_coding

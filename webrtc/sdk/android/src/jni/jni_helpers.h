@@ -17,9 +17,9 @@
 #include <jni.h>
 #include <string>
 
-#include "webrtc/base/constructormagic.h"
-#include "webrtc/base/checks.h"
-#include "webrtc/base/thread_checker.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/constructormagic.h"
+#include "webrtc/rtc_base/thread_checker.h"
 
 // Abort the process if |jni| has a Java exception pending.
 // This macros uses the comma operator to execute ExceptionDescribe
@@ -33,6 +33,23 @@
 // message if that didn't actually delete *ptr because of extra refcounts.
 #define CHECK_RELEASE(ptr) \
   RTC_CHECK_EQ(0, (ptr)->Release()) << "Unexpected refcount."
+
+// Convenience macro defining JNI-accessible methods in the org.webrtc package.
+// Eliminates unnecessary boilerplate and line-wraps, reducing visual clutter.
+//
+// TODO(deadbeef): Rename this macro to something like
+// "JNI_FUNCTION_DECLARATION", and use variable length arguments, such that you
+// can write:
+//
+// JNI_FUNCTION_DECLARATION(void, nativeFoo, Type arg1, Type arg2) { ...
+//
+// Instead of:
+//
+// JNI_FUNCTION_DECLARATION(void, nativeFoo)(Type arg1, Type arg2) { ...
+//
+// The latter gets handled poorly by autoformatting tools.
+#define JOW(rettype, name) \
+  extern "C" JNIEXPORT rettype JNICALL Java_org_webrtc_##name
 
 namespace webrtc_jni {
 
@@ -96,6 +113,12 @@ std::string JavaToStdString(JNIEnv* jni, const jstring& j_string);
 // Return the (singleton) Java Enum object corresponding to |index|;
 jobject JavaEnumFromIndex(JNIEnv* jni, jclass state_class,
                           const std::string& state_class_name, int index);
+
+// Return the (singleton) Java Enum object corresponding to |index|;
+// |state_class_fragment| is something like "MediaSource$State".
+jobject JavaEnumFromIndexAndClassName(JNIEnv* jni,
+                                      const std::string& state_class_fragment,
+                                      int index);
 
 // Returns the name of a Java enum.
 std::string GetJavaEnumName(JNIEnv* jni,

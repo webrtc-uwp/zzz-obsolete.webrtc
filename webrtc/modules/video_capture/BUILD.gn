@@ -26,9 +26,10 @@ rtc_static_library("video_capture_module") {
   ]
 
   deps = [
+    "..:module_api",
     "../..:webrtc_common",
-    "../../base:rtc_base_approved",
     "../../common_video",
+    "../../rtc_base:rtc_base_approved",
     "../../system_wrappers",
   ]
 
@@ -46,7 +47,7 @@ rtc_static_library("video_capture") {
 
   deps = [
     ":video_capture_module",
-    "../../base:rtc_base_approved",
+    "../../rtc_base:rtc_base_approved",
     "../../system_wrappers",
   ]
 
@@ -92,7 +93,7 @@ if (!build_with_chromium) {
 
     deps = [
       ":video_capture_module",
-      "../../base:rtc_base_approved",
+      "../../rtc_base:rtc_base_approved",
       "../../system_wrappers",
     ]
 
@@ -155,15 +156,6 @@ if (!build_with_chromium) {
         "objc/video_capture.h",
         "objc/video_capture.mm",
       ]
-
-      cflags = [
-        "-fobjc-arc",  # CLANG_ENABLE_OBJC_ARC = YES.
-
-        # To avoid warnings for deprecated videoMinFrameDuration and
-        # videoMaxFrameDuration properties in iOS 7.0.
-        # See webrtc:3705 for more details.
-        "-Wno-deprecated-declarations",
-      ]
     }
 
     all_dependent_configs = [ ":video_capture_internal_impl_config" ]
@@ -203,15 +195,15 @@ if (!build_with_chromium) {
       deps = [
         ":video_capture_internal_impl",
         ":video_capture_module",
-        "../../base:rtc_base_approved",
         "../../common_video:common_video",
+        "../../rtc_base:rtc_base_approved",
         "../../system_wrappers:system_wrappers",
         "../../system_wrappers:system_wrappers_default",
         "../../test:video_test_common",
         "../utility",
         "//testing/gtest",
       ]
-      deps += [ "//webrtc/test:test_main" ]
+      deps += [ "../../test:test_main" ]
 
       if (!build_with_chromium && is_clang) {
         # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).

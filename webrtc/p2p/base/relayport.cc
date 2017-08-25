@@ -10,10 +10,10 @@
 #include <algorithm>
 
 #include "webrtc/p2p/base/relayport.h"
-#include "webrtc/base/asyncpacketsocket.h"
-#include "webrtc/base/checks.h"
-#include "webrtc/base/helpers.h"
-#include "webrtc/base/logging.h"
+#include "webrtc/rtc_base/asyncpacketsocket.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/helpers.h"
+#include "webrtc/rtc_base/logging.h"
 
 namespace cricket {
 
@@ -182,7 +182,6 @@ class AllocateRequest : public StunRequest {
 RelayPort::RelayPort(rtc::Thread* thread,
                      rtc::PacketSocketFactory* factory,
                      rtc::Network* network,
-                     const rtc::IPAddress& ip,
                      uint16_t min_port,
                      uint16_t max_port,
                      const std::string& username,
@@ -191,7 +190,6 @@ RelayPort::RelayPort(rtc::Thread* thread,
            RELAY_PORT_TYPE,
            factory,
            network,
-           ip,
            min_port,
            max_port,
            username,
@@ -489,14 +487,14 @@ void RelayEntry::Connect() {
   if (ra->proto == PROTO_UDP) {
     // UDP sockets are simple.
     socket = port_->socket_factory()->CreateUdpSocket(
-        rtc::SocketAddress(port_->ip(), 0),
-        port_->min_port(), port_->max_port());
+        rtc::SocketAddress(port_->Network()->GetBestIP(), 0), port_->min_port(),
+        port_->max_port());
   } else if (ra->proto == PROTO_TCP || ra->proto == PROTO_SSLTCP) {
     int opts = (ra->proto == PROTO_SSLTCP)
                    ? rtc::PacketSocketFactory::OPT_TLS_FAKE
                    : 0;
     socket = port_->socket_factory()->CreateClientTcpSocket(
-        rtc::SocketAddress(port_->ip(), 0), ra->address,
+        rtc::SocketAddress(port_->Network()->GetBestIP(), 0), ra->address,
         port_->proxy(), port_->user_agent(), opts);
   } else {
     LOG(LS_WARNING) << "Unknown protocol (" << ra->proto << ")";
@@ -576,36 +574,32 @@ int RelayEntry::SendTo(const void* data, size_t size,
   RelayMessage request;
   request.SetType(STUN_SEND_REQUEST);
 
-  StunByteStringAttribute* magic_cookie_attr =
+  auto magic_cookie_attr =
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
   magic_cookie_attr->CopyBytes(TURN_MAGIC_COOKIE_VALUE,
                                sizeof(TURN_MAGIC_COOKIE_VALUE));
-  request.AddAttribute(magic_cookie_attr);
+  request.AddAttribute(std::move(magic_cookie_attr));
 
-  StunByteStringAttribute* username_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+  auto username_attr = StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   username_attr->CopyBytes(port_->username_fragment().c_str(),
                            port_->username_fragment().size());
-  request.AddAttribute(username_attr);
+  request.AddAttribute(std::move(username_attr));
 
-  StunAddressAttribute* addr_attr =
-      StunAttribute::CreateAddress(STUN_ATTR_DESTINATION_ADDRESS);
+  auto addr_attr = StunAttribute::CreateAddress(STUN_ATTR_DESTINATION_ADDRESS);
   addr_attr->SetIP(addr.ipaddr());
   addr_attr->SetPort(addr.port());
-  request.AddAttribute(addr_attr);
+  request.AddAttribute(std::move(addr_attr));
 
   // Attempt to lock
   if (ext_addr_ == addr) {
-    StunUInt32Attribute* options_attr =
-      StunAttribute::CreateUInt32(STUN_ATTR_OPTIONS);
+    auto options_attr = StunAttribute::CreateUInt32(STUN_ATTR_OPTIONS);
     options_attr->SetValue(0x1);
-    request.AddAttribute(options_attr);
+    request.AddAttribute(std::move(options_attr));
   }
 
-  StunByteStringAttribute* data_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_DATA);
+  auto data_attr = StunAttribute::CreateByteString(STUN_ATTR_DATA);
   data_attr->CopyBytes(data, size);
-  request.AddAttribute(data_attr);
+  request.AddAttribute(std::move(data_attr));
 
   // TODO: compute the HMAC.
 
@@ -787,12 +781,11 @@ AllocateRequest::AllocateRequest(RelayEntry* entry,
 void AllocateRequest::Prepare(StunMessage* request) {
   request->SetType(STUN_ALLOCATE_REQUEST);
 
-  StunByteStringAttribute* username_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+  auto username_attr = StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   username_attr->CopyBytes(
       entry_->port()->username_fragment().c_str(),
       entry_->port()->username_fragment().size());
-  request->AddAttribute(username_attr);
+  request->AddAttribute(std::move(username_attr));
 }
 
 void AllocateRequest::OnSent() {
@@ -829,7 +822,7 @@ void AllocateRequest::OnResponse(StunMessage* response) {
 void AllocateRequest::OnErrorResponse(StunMessage* response) {
   const StunErrorCodeAttribute* attr = response->GetErrorCode();
   if (!attr) {
-    LOG(INFO) << "Bad allocate response error code";
+    LOG(LS_ERROR) << "Missing allocate response error code.";
   } else {
     LOG(INFO) << "Allocate error response:"
               << " code=" << attr->code()

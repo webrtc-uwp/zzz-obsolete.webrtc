@@ -106,7 +106,7 @@ class PacedSenderTest : public ::testing::Test {
   PacedSenderTest() : clock_(123456) {
     srand(0);
     // Need to initialize PacedSender after we initialize clock.
-    send_bucket_.reset(new PacedSender(&clock_, &callback_));
+    send_bucket_.reset(new PacedSender(&clock_, &callback_, nullptr));
     send_bucket_->CreateProbeCluster(kFirstClusterBps);
     send_bucket_->CreateProbeCluster(kSecondClusterBps);
     // Default to bitrate probing disabled for testing purposes. Probing tests
@@ -135,6 +135,25 @@ class PacedSenderTest : public ::testing::Test {
   MockPacedSenderCallback callback_;
   std::unique_ptr<PacedSender> send_bucket_;
 };
+
+TEST_F(PacedSenderTest, FirstSentPacketTimeIsSet) {
+  uint16_t sequence_number = 1234;
+  const uint32_t kSsrc = 12345;
+  const size_t kSizeBytes = 250;
+  const size_t kPacketToSend = 3;
+  const int64_t kStartMs = clock_.TimeInMilliseconds();
+
+  // No packet sent.
+  EXPECT_EQ(-1, send_bucket_->FirstSentPacketTimeMs());
+
+  for (size_t i = 0; i < kPacketToSend; ++i) {
+    SendAndExpectPacket(PacedSender::kNormalPriority, kSsrc, sequence_number++,
+                        clock_.TimeInMilliseconds(), kSizeBytes, false);
+    send_bucket_->Process();
+    clock_.AdvanceTimeMilliseconds(send_bucket_->TimeUntilNextProcess());
+  }
+  EXPECT_EQ(kStartMs, send_bucket_->FirstSentPacketTimeMs());
+}
 
 TEST_F(PacedSenderTest, QueuePacket) {
   uint32_t ssrc = 12345;
@@ -410,7 +429,7 @@ TEST_F(PacedSenderTest, VerifyAverageBitrateVaryingMediaPayload) {
   const int kTimeStep = 5;
   const int64_t kBitrateWindow = 10000;
   PacedSenderPadding callback;
-  send_bucket_.reset(new PacedSender(&clock_, &callback));
+  send_bucket_.reset(new PacedSender(&clock_, &callback, nullptr));
   send_bucket_->SetProbingEnabled(false);
   send_bucket_->SetEstimatedBitrate(kTargetBitrateBps);
 
@@ -632,10 +651,20 @@ TEST_F(PacedSenderTest, Pause) {
   EXPECT_EQ(second_capture_time_ms - capture_time_ms,
             send_bucket_->QueueInMs());
 
-  for (int i = 0; i < 10; ++i) {
+  EXPECT_EQ(0, send_bucket_->TimeUntilNextProcess());
+  EXPECT_CALL(callback_, TimeToSendPadding(1, _)).Times(1);
+  send_bucket_->Process();
+
+  int64_t expected_time_until_send = 500;
+  EXPECT_CALL(callback_, TimeToSendPadding(1, _)).Times(1);
+  while (expected_time_until_send >= 0) {
+    // TimeUntilNextProcess must not return 0 when paused.  If it does,
+    // we risk running a busy loop, so ideally it should return a large value.
+    EXPECT_EQ(expected_time_until_send, send_bucket_->TimeUntilNextProcess());
+    if (expected_time_until_send == 0)
+      send_bucket_->Process();
     clock_.AdvanceTimeMilliseconds(5);
-    EXPECT_EQ(0, send_bucket_->TimeUntilNextProcess());
-    send_bucket_->Process();
+    expected_time_until_send -= 5;
   }
 
   // Expect high prio packets to come out first followed by normal
@@ -678,10 +707,10 @@ TEST_F(PacedSenderTest, Pause) {
   send_bucket_->Resume();
 
   for (size_t i = 0; i < 4; i++) {
-    EXPECT_EQ(5, send_bucket_->TimeUntilNextProcess());
-    clock_.AdvanceTimeMilliseconds(5);
     EXPECT_EQ(0, send_bucket_->TimeUntilNextProcess());
     send_bucket_->Process();
+    EXPECT_EQ(5, send_bucket_->TimeUntilNextProcess());
+    clock_.AdvanceTimeMilliseconds(5);
   }
 
   EXPECT_EQ(0, send_bucket_->QueueInMs());
@@ -803,7 +832,7 @@ TEST_F(PacedSenderTest, ProbingWithInsertedPackets) {
   uint16_t sequence_number = 1234;
 
   PacedSenderProbing packet_sender;
-  send_bucket_.reset(new PacedSender(&clock_, &packet_sender));
+  send_bucket_.reset(new PacedSender(&clock_, &packet_sender, nullptr));
   send_bucket_->CreateProbeCluster(kFirstClusterBps);
   send_bucket_->CreateProbeCluster(kSecondClusterBps);
   send_bucket_->SetEstimatedBitrate(kInitialBitrateBps);
@@ -849,7 +878,7 @@ TEST_F(PacedSenderTest, ProbingWithPaddingSupport) {
   uint16_t sequence_number = 1234;
 
   PacedSenderProbing packet_sender;
-  send_bucket_.reset(new PacedSender(&clock_, &packet_sender));
+  send_bucket_.reset(new PacedSender(&clock_, &packet_sender, nullptr));
   send_bucket_->CreateProbeCluster(kFirstClusterBps);
   send_bucket_->SetEstimatedBitrate(kInitialBitrateBps);
 

@@ -13,23 +13,32 @@ import subprocess
 import sys
 
 
-# Directories that will be scanned by cpplint by the presubmit script.
-CPPLINT_DIRS = [
-  'webrtc/api',
-  'webrtc/audio',
-  'webrtc/call',
-  'webrtc/common_video',
-  'webrtc/examples',
-  'webrtc/modules/audio_mixer',
-  'webrtc/modules/bitrate_controller',
-  'webrtc/modules/congestion_controller',
-  'webrtc/modules/pacing',
-  'webrtc/modules/remote_bitrate_estimator',
-  'webrtc/modules/rtp_rtcp',
-  'webrtc/modules/video_coding',
-  'webrtc/modules/video_processing',
-  'webrtc/tools',
-  'webrtc/video',
+# Files and directories that are *skipped* by cpplint in the presubmit script.
+CPPLINT_BLACKLIST = [
+  'tools_webrtc',
+  'webrtc/api/video_codecs/video_decoder.h',
+  'webrtc/examples/objc',
+  'webrtc/media',
+  'webrtc/modules/audio_coding',
+  'webrtc/modules/audio_conference_mixer',
+  'webrtc/modules/audio_device',
+  'webrtc/modules/audio_processing',
+  'webrtc/modules/desktop_capture',
+  'webrtc/modules/include/module_common_types.h',
+  'webrtc/modules/media_file',
+  'webrtc/modules/utility',
+  'webrtc/modules/video_capture',
+  'webrtc/p2p',
+  'webrtc/pc',
+  'webrtc/rtc_base',
+  'webrtc/sdk/android/src/jni',
+  'webrtc/sdk/objc',
+  'webrtc/system_wrappers',
+  'webrtc/test',
+  'webrtc/voice_engine',
+  'webrtc/common_types.h',
+  'webrtc/common_types.cc',
+  'webrtc/video_send_stream.h',
 ]
 
 # These filters will always be removed, even if the caller specifies a filter
@@ -63,7 +72,6 @@ NATIVE_API_DIRS = (
 # These directories should not be used but are maintained only to avoid breaking
 # some legacy downstream code.
 LEGACY_API_DIRS = (
-  'webrtc/base',
   'webrtc/common_audio/include',
   'webrtc/modules/audio_coding/include',
   'webrtc/modules/audio_conference_mixer/include',
@@ -80,6 +88,7 @@ LEGACY_API_DIRS = (
   'webrtc/modules/video_coding/codecs/vp8/include',
   'webrtc/modules/video_coding/codecs/vp9/include',
   'webrtc/modules/video_coding/include',
+  'webrtc/rtc_base',
   'webrtc/system_wrappers/include',
   'webrtc/voice_engine/include',
 )
@@ -115,7 +124,7 @@ def _VerifyNativeApiHeadersListIsValid(input_api, output_api):
         non_existing_paths)]
   return []
 
-api_change_msg = """
+API_CHANGE_MSG = """
 You seem to be changing native API header files. Please make sure that you:
   1. Make compatible changes that don't break existing clients. Usually
      this is done by keeping the existing method signatures unchanged.
@@ -144,7 +153,7 @@ def _CheckNativeApiHeaderChanges(input_api, output_api):
           files.append(f)
 
   if files:
-    return [output_api.PresubmitNotifyResult(api_change_msg, files)]
+    return [output_api.PresubmitNotifyResult(API_CHANGE_MSG, files)]
   return []
 
 
@@ -189,7 +198,7 @@ def _CheckNoPragmaOnce(input_api, output_api):
   return []
 
 
-def _CheckNoFRIEND_TEST(input_api, output_api):
+def _CheckNoFRIEND_TEST(input_api, output_api):  # pylint: disable=invalid-name
   """Make sure that gtest's FRIEND_TEST() macro is not used, the
   FRIEND_TEST_ALL_PREFIXES() macro from testsupport/gtest_prod_util.h should be
   used instead since that allows for FLAKY_, FAILS_ and DISABLED_ prefixes."""
@@ -208,17 +217,17 @@ def _CheckNoFRIEND_TEST(input_api, output_api):
       'use FRIEND_TEST_ALL_PREFIXES() instead.\n' + '\n'.join(problems))]
 
 
-def _IsLintWhitelisted(whitelist_dirs, file_path):
-  """ Checks if a file is whitelisted for lint check."""
-  for path in whitelist_dirs:
-    if os.path.dirname(file_path).startswith(path):
+def _IsLintBlacklisted(blacklist_paths, file_path):
+  """ Checks if a file is blacklisted for lint check."""
+  for path in blacklist_paths:
+    if file_path == path or os.path.dirname(file_path).startswith(path):
       return True
   return False
 
 
 def _CheckApprovedFilesLintClean(input_api, output_api,
                                  source_file_filter=None):
-  """Checks that all new or whitelisted .cc and .h files pass cpplint.py.
+  """Checks that all new or non-blacklisted .cc and .h files pass cpplint.py.
   This check is based on _CheckChangeLintsClean in
   depot_tools/presubmit_canned_checks.py but has less filters and only checks
   added files."""
@@ -234,19 +243,20 @@ def _CheckApprovedFilesLintClean(input_api, output_api,
   lint_filters.extend(BLACKLIST_LINT_FILTERS)
   cpplint._SetFilters(','.join(lint_filters))
 
-  # Create a platform independent whitelist for the CPPLINT_DIRS.
-  whitelist_dirs = [input_api.os_path.join(*path.split('/'))
-                    for path in CPPLINT_DIRS]
+  # Create a platform independent blacklist for cpplint.
+  blacklist_paths = [input_api.os_path.join(*path.split('/'))
+                     for path in CPPLINT_BLACKLIST]
 
   # Use the strictest verbosity level for cpplint.py (level 1) which is the
-  # default when running cpplint.py from command line.
-  # To make it possible to work with not-yet-converted code, we're only applying
-  # it to new (or moved/renamed) files and files listed in LINT_FOLDERS.
+  # default when running cpplint.py from command line. To make it possible to
+  # work with not-yet-converted code, we're only applying it to new (or
+  # moved/renamed) files and files not listed in CPPLINT_BLACKLIST.
   verbosity_level = 1
   files = []
   for f in input_api.AffectedSourceFiles(source_file_filter):
     # Note that moved/renamed files also count as added.
-    if f.Action() == 'A' or _IsLintWhitelisted(whitelist_dirs, f.LocalPath()):
+    if f.Action() == 'A' or not _IsLintBlacklisted(blacklist_paths,
+                                                   f.LocalPath()):
       files.append(f.AbsoluteLocalPath())
 
   for file_name in files:
@@ -254,9 +264,7 @@ def _CheckApprovedFilesLintClean(input_api, output_api,
 
   if cpplint._cpplint_state.error_count > 0:
     if input_api.is_committing:
-      # TODO(kjellander): Change back to PresubmitError below when we're
-      # confident with the lint settings.
-      res_type = output_api.PresubmitPromptWarning
+      res_type = output_api.PresubmitError
     else:
       res_type = output_api.PresubmitPromptWarning
     result = [res_type('Changelist failed cpplint.py check.')]
@@ -322,7 +330,8 @@ def _CheckNoMixingCAndCCSources(input_api, gn_files, output_api):
 
 def _CheckNoPackageBoundaryViolations(input_api, gn_files, output_api):
   cwd = input_api.PresubmitLocalPath()
-  script_path = os.path.join('tools-webrtc', 'check_package_boundaries.py')
+  script_path = os.path.join('tools_webrtc', 'presubmit_checks_lib',
+                             'check_package_boundaries.py')
   webrtc_path = os.path.join('webrtc')
   command = [sys.executable, script_path, webrtc_path]
   command += [gn_file.LocalPath() for gn_file in gn_files]
@@ -399,13 +408,18 @@ def _CheckUnwantedDependencies(input_api, output_api):
   results = []
   if error_descriptions:
     results.append(output_api.PresubmitError(
-        'You added one or more #includes that violate checkdeps rules.',
+        'You added one or more #includes that violate checkdeps rules.\n'
+        'Check that the DEPS files in these locations contain valid rules.\n'
+        'See https://cs.chromium.org/chromium/src/buildtools/checkdeps/ for '
+        'more details about checkdeps.',
         error_descriptions))
   if warning_descriptions:
     results.append(output_api.PresubmitPromptOrNotify(
         'You added one or more #includes of files that are temporarily\n'
         'allowed but being removed. Can you avoid introducing the\n'
-        '#include? See relevant DEPS file(s) for details and contacts.',
+        '#include? See relevant DEPS file(s) for details and contacts.\n'
+        'See https://cs.chromium.org/chromium/src/buildtools/checkdeps/ for '
+        'more details about checkdeps.',
         warning_descriptions))
   return results
 
@@ -451,13 +465,15 @@ def _CheckJSONParseErrors(input_api, output_api):
 
 
 def _RunPythonTests(input_api, output_api):
-  def join(*args):
+  def Join(*args):
     return input_api.os_path.join(input_api.PresubmitLocalPath(), *args)
 
   test_directories = [
-      join('webrtc', 'tools', 'py_event_log_analyzer')
+      Join('webrtc', 'rtc_tools', 'py_event_log_analyzer'),
+      Join('webrtc', 'rtc_tools'),
+      Join('webrtc', 'audio', 'test', 'unittests'),
   ] + [
-      root for root, _, files in os.walk(join('tools-webrtc'))
+      root for root, _, files in os.walk(Join('tools_webrtc'))
       if any(f.endswith('_test.py') for f in files)
   ]
 
@@ -470,6 +486,46 @@ def _RunPythonTests(input_api, output_api):
           directory,
           whitelist=[r'.+_test\.py$']))
   return input_api.RunTests(tests, parallel=True)
+
+
+def _CheckUsageOfGoogleProtobufNamespace(input_api, output_api):
+  """Checks that the namespace google::protobuf has not been used."""
+  files = []
+  pattern = input_api.re.compile(r'google::protobuf')
+  proto_utils_path = os.path.join('webrtc', 'base', 'protobuf_utils.h')
+  for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
+    if f.LocalPath() in [proto_utils_path, 'PRESUBMIT.py']:
+      continue
+    contents = input_api.ReadFile(f)
+    if pattern.search(contents):
+      files.append(f)
+
+  if files:
+    return [output_api.PresubmitError(
+        'Please avoid to use namespace `google::protobuf` directly.\n'
+        'Add a using directive in `%s` and include that header instead.'
+        % proto_utils_path, files)]
+  return []
+
+
+def _CheckNoChangesToWebRTCBase(input_api, output_api):
+  """Checks that no changes refer to webrtc/base."""
+  problems = []
+
+  for f in input_api.AffectedFiles():
+    if os.path.join('webrtc', 'base') in f.LocalPath():
+      problems.append('    ' + f.LocalPath())
+      continue
+    for line_num, line in f.ChangedContents():
+      if 'webrtc/base' in line:
+        problems.append('    %s: %s' % (f.LocalPath(), line_num))
+
+  if problems:
+    return [output_api.PresubmitPromptWarning(
+        'webrtc/base is being moved to webrtc/rtc_base (See '
+        'bugs.webrtc.org/7634). Please refer to webrtc/rtc_base instead in the '
+        'following files:\n' + '\n'.join(problems))]
+  return []
 
 
 def _CommonChecks(input_api, output_api):
@@ -489,19 +545,16 @@ def _CommonChecks(input_api, output_api):
       black_list=(r'^base[\\\/].*\.py$',
                   r'^build[\\\/].*\.py$',
                   r'^buildtools[\\\/].*\.py$',
+                  r'^infra[\\\/].*\.py$',
                   r'^ios[\\\/].*\.py$',
                   r'^out.*[\\\/].*\.py$',
                   r'^testing[\\\/].*\.py$',
                   r'^third_party[\\\/].*\.py$',
                   r'^tools[\\\/].*\.py$',
                   # TODO(phoglund): should arguably be checked.
-                  r'^tools-webrtc[\\\/]mb[\\\/].*\.py$',
-                  r'^tools-webrtc[\\\/]valgrind[\\\/].*\.py$',
+                  r'^tools_webrtc[\\\/]mb[\\\/].*\.py$',
+                  r'^tools_webrtc[\\\/]valgrind[\\\/].*\.py$',
                   r'^xcodebuild.*[\\\/].*\.py$',),
-      disabled_warnings=['F0401',  # Failed to import x
-                         'E0611',  # No package y in x
-                         'W0232',  # Class has no __init__ method
-                        ],
       pylintrc='pylintrc'))
 
   # TODO(nisse): talk/ is no more, so make below checks simpler?
@@ -540,6 +593,10 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckUnwantedDependencies(input_api, output_api))
   results.extend(_CheckJSONParseErrors(input_api, output_api))
   results.extend(_RunPythonTests(input_api, output_api))
+  results.extend(_CheckUsageOfGoogleProtobufNamespace(input_api, output_api))
+  results.extend(_CheckOrphanHeaders(input_api, output_api))
+  results.extend(_CheckNewLineAtTheEndOfProtoFiles(input_api, output_api))
+  results.extend(_CheckNoChangesToWebRTCBase(input_api, output_api))
   return results
 
 
@@ -561,9 +618,52 @@ def CheckChangeOnCommit(input_api, output_api):
   results.extend(input_api.canned_checks.CheckChangeHasDescription(
       input_api, output_api))
   results.extend(_CheckChangeHasBugField(input_api, output_api))
-  results.extend(input_api.canned_checks.CheckChangeHasTestField(
-      input_api, output_api))
   results.extend(input_api.canned_checks.CheckTreeIsOpen(
       input_api, output_api,
       json_url='http://webrtc-status.appspot.com/current?format=json'))
+  return results
+
+
+def _CheckOrphanHeaders(input_api, output_api):
+  # We need to wait until we have an input_api object and use this
+  # roundabout construct to import prebubmit_checks_lib because this file is
+  # eval-ed and thus doesn't have __file__.
+  error_msg = """Header file {} is not listed in any GN target.
+  Please create a target or add it to an existing one in {}"""
+  results = []
+  original_sys_path = sys.path
+  try:
+    sys.path = sys.path + [input_api.os_path.join(
+        input_api.PresubmitLocalPath(), 'tools_webrtc', 'presubmit_checks_lib')]
+    from check_orphan_headers import GetBuildGnPathFromFilePath
+    from check_orphan_headers import IsHeaderInBuildGn
+  finally:
+    # Restore sys.path to what it was before.
+    sys.path = original_sys_path
+
+  for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
+    if f.LocalPath().endswith('.h') and f.Action() == 'A':
+      file_path = os.path.abspath(f.LocalPath())
+      root_dir = os.getcwd()
+      gn_file_path = GetBuildGnPathFromFilePath(file_path, os.path.exists,
+                                                root_dir)
+      in_build_gn = IsHeaderInBuildGn(file_path, gn_file_path)
+      if not in_build_gn:
+        results.append(output_api.PresubmitError(error_msg.format(
+            file_path, gn_file_path)))
+  return results
+
+
+def _CheckNewLineAtTheEndOfProtoFiles(input_api, output_api):
+  """Checks that all .proto files are terminated with a newline."""
+  error_msg = 'File {} must end with exactly one newline.'
+  results = []
+  source_file_filter = lambda x: input_api.FilterSourceFile(
+      x, white_list=(r'.+\.proto$',))
+  for f in input_api.AffectedSourceFiles(source_file_filter):
+    file_path = f.LocalPath()
+    with open(file_path) as f:
+      lines = f.readlines()
+      if lines[-1] != '\n' or lines[-2] == '\n':
+        results.append(output_api.PresubmitError(error_msg.format(file_path)))
   return results

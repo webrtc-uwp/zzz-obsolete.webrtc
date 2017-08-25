@@ -15,8 +15,8 @@
 #include <DXGI.h>
 #include <DXGI1_2.h>
 
-#include "webrtc/base/checks.h"
-#include "webrtc/system_wrappers/include/logging.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -87,7 +87,8 @@ void DxgiTextureStaging::AssertStageAndSurfaceAreSameObject() {
 bool DxgiTextureStaging::CopyFromTexture(
     const DXGI_OUTDUPL_FRAME_INFO& frame_info,
     ID3D11Texture2D* texture) {
-  RTC_DCHECK(texture && frame_info.AccumulatedFrames > 0);
+  RTC_DCHECK_GT(frame_info.AccumulatedFrames, 0);
+  RTC_DCHECK(texture);
 
   // AcquireNextFrame returns a CPU inaccessible IDXGIResource, so we need to
   // copy it to a CPU accessible staging ID3D11Texture2D.

@@ -12,9 +12,6 @@
 
 #include <utility>
 
-#include "webrtc/base/checks.h"
-#include "webrtc/base/logging.h"
-#include "webrtc/base/timeutils.h"
 #include "webrtc/modules/desktop_capture/desktop_capture_options.h"
 #include "webrtc/modules/desktop_capture/desktop_frame.h"
 #include "webrtc/modules/desktop_capture/desktop_frame_win.h"
@@ -23,7 +20,9 @@
 #include "webrtc/modules/desktop_capture/win/cursor.h"
 #include "webrtc/modules/desktop_capture/win/desktop.h"
 #include "webrtc/modules/desktop_capture/win/screen_capture_utils.h"
-#include "webrtc/system_wrappers/include/logging.h"
+#include "webrtc/rtc_base/checks.h"
+#include "webrtc/rtc_base/logging.h"
+#include "webrtc/rtc_base/timeutils.h"
 
 namespace webrtc {
 
@@ -94,6 +93,7 @@ void ScreenCapturerWinGdi::CaptureFrame() {
   frame->set_capture_time_ms(
       (rtc::TimeNanos() - capture_start_time_nanos) /
       rtc::kNumNanosecsPerMillisec);
+  frame->set_capturer_id(DesktopCapturerId::kScreenCapturerWinGdi);
   callback_->OnCaptureResult(Result::SUCCESS, std::move(frame));
 }
 
@@ -148,14 +148,8 @@ void ScreenCapturerWinGdi::PrepareCaptureResources() {
     }
   }
 
-  // If the display bounds have changed then recreate GDI resources.
-  // TODO(wez): Also check for pixel format changes.
-  DesktopRect screen_rect(DesktopRect::MakeXYWH(
-      GetSystemMetrics(SM_XVIRTUALSCREEN),
-      GetSystemMetrics(SM_YVIRTUALSCREEN),
-      GetSystemMetrics(SM_CXVIRTUALSCREEN),
-      GetSystemMetrics(SM_CYVIRTUALSCREEN)));
-  if (!screen_rect.equals(desktop_dc_rect_)) {
+  // If the display configurations have changed then recreate GDI resources.
+  if (display_configuration_monitor_.IsChanged()) {
     if (desktop_dc_) {
       ReleaseDC(NULL, desktop_dc_);
       desktop_dc_ = nullptr;
@@ -164,7 +158,6 @@ void ScreenCapturerWinGdi::PrepareCaptureResources() {
       DeleteDC(memory_dc_);
       memory_dc_ = nullptr;
     }
-    desktop_dc_rect_ = DesktopRect();
   }
 
   if (!desktop_dc_) {
@@ -175,8 +168,6 @@ void ScreenCapturerWinGdi::PrepareCaptureResources() {
     RTC_CHECK(desktop_dc_);
     memory_dc_ = CreateCompatibleDC(desktop_dc_);
     RTC_CHECK(memory_dc_);
-
-    desktop_dc_rect_ = screen_rect;
 
     // Make sure the frame buffers will be reallocated.
     queue_.Reset();
