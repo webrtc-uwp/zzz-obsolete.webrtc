@@ -13,6 +13,7 @@
 
 #include <memory>
 
+#include "webrtc/system_wrappers/include/ntp_time.h"
 #include "webrtc/system_wrappers/include/rw_lock_wrapper.h"
 #include "webrtc/typedefs.h"
 
@@ -43,15 +44,21 @@ class Clock {
   // Retrieve an NTP absolute timestamp in milliseconds.
   virtual int64_t CurrentNtpInMilliseconds() const = 0;
 
+  // TODO(danilchap): Make pure virtual once implemented in derived classed
+  // replacing CurrentNtp function.
+  virtual NtpTime CurrentNtpTime() const;
+
   // Converts an NTP timestamp to a millisecond timestamp.
-  static int64_t NtpToMs(uint32_t seconds, uint32_t fractions);
+  static int64_t NtpToMs(uint32_t seconds, uint32_t fractions) {
+    return NtpTime(seconds, fractions).ToMs();
+  }
 
   // Returns an instance of the real-time system clock implementation.
   static Clock* GetRealTimeClock();
 
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
   static const int64_t CurrentNtpDeltaMs;
-#endif
+#endif /* WEBRTC_FEATURE_END_TO_END_DELAY */
 };
 
 class SimulatedClock : public Clock {

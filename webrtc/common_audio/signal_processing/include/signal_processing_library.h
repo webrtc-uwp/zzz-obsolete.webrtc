@@ -48,7 +48,7 @@
 #ifndef WEBRTC_ARCH_ARM_V7
 // For ARMv7 platforms, these are inline functions in spl_inl_armv7.h
 #if !(defined(WINAPI_FAMILY) && WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
-// For WINRT on Windows Phone, these are inline functions in spl_inl_neon.h
+// For WINUWP on Windows Phone, these are inline functions in spl_inl_neon.h
 #ifndef MIPS32_LE
 // For MIPS platforms, these are inline functions in spl_inl_mips.h
 #define WEBRTC_SPL_MUL_16_16(a, b) \
@@ -66,9 +66,9 @@
 #define WEBRTC_SPL_MUL_16_32_RSFT14(a, b)          \
   (WEBRTC_SPL_MUL_16_16(a, (b) >> 16) * (1 << 2) + \
    (((WEBRTC_SPL_MUL_16_U16(a, (uint16_t)(b)) >> 1) + 0x1000) >> 13))
-#define WEBRTC_SPL_MUL_16_32_RSFT15(a, b) \
-    ((WEBRTC_SPL_MUL_16_16(a, (b) >> 16) << 1) \
-    + (((WEBRTC_SPL_MUL_16_U16(a, (uint16_t)(b)) >> 1) + 0x2000) >> 14))
+#define WEBRTC_SPL_MUL_16_32_RSFT15(a, b)            \
+  ((WEBRTC_SPL_MUL_16_16(a, (b) >> 16) * (1 << 1)) + \
+   (((WEBRTC_SPL_MUL_16_U16(a, (uint16_t)(b)) >> 1) + 0x2000) >> 14))
 
 #define WEBRTC_SPL_MUL_16_16_RSFT(a, b, c) \
     (WEBRTC_SPL_MUL_16_16(a, b) >> (c))
@@ -346,8 +346,8 @@ void WebRtcSpl_ScaleAndAddVectors(const int16_t* in_vector1,
 //
 // Output:
 //      - out_vector       : Output vector
-// Return value            : 0 if OK, -1 if (in_vector1 == NULL
-//                           || in_vector2 == NULL || out_vector == NULL
+// Return value            : 0 if OK, -1 if (in_vector1 == null
+//                           || in_vector2 == null || out_vector == null
 //                           || length <= 0 || right_shift < 0).
 typedef int (*ScaleAndAddVectorsWithRound)(const int16_t* in_vector1,
                                            int16_t in_vector1_scale,

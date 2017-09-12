@@ -12,14 +12,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "testing/gtest/include/gtest/gtest.h"
-
 #include "webrtc/modules/video_coding/include/video_coding.h"
 #include "webrtc/modules/video_coding/internal_defines.h"
-#include "webrtc/modules/video_coding/timing.h"
 #include "webrtc/modules/video_coding/test/test_util.h"
+#include "webrtc/modules/video_coding/timing.h"
 #include "webrtc/system_wrappers/include/clock.h"
 #include "webrtc/system_wrappers/include/trace.h"
+#include "webrtc/test/gtest.h"
 #include "webrtc/test/testsupport/fileutils.h"
 
 namespace webrtc {
@@ -89,9 +88,9 @@ TEST(ReceiverTiming, Tests) {
     timing.StopDecodeTimer(
         timeStamp, clock.TimeInMilliseconds() - startTimeMs,
         clock.TimeInMilliseconds(),
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
         0,//dummy data
-#endif
+#endif // WEBRTC_FEATURE_END_TO_END_DELAY
         timing.RenderTimeMs(timeStamp, clock.TimeInMilliseconds()));
     timeStamp += 90000 / 25;
     clock.AdvanceTimeMilliseconds(1000 / 25 - 10);

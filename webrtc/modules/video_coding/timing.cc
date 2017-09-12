@@ -8,8 +8,6 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
-#include <algorithm>
-
 #include "webrtc/modules/video_coding/timing.h"
 
 #include <algorithm>
@@ -65,14 +63,14 @@ void VCMTiming::UpdateHistograms() const {
   if (elapsed_sec < metrics::kMinRunTimeInSeconds) {
     return;
   }
-  RTC_LOGGED_HISTOGRAM_COUNTS_100(
+  RTC_HISTOGRAM_COUNTS_100(
       "WebRTC.Video.DecodedFramesPerSecond",
       static_cast<int>((num_decoded_frames_ / elapsed_sec) + 0.5f));
-  RTC_LOGGED_HISTOGRAM_PERCENTAGE(
+  RTC_HISTOGRAM_PERCENTAGE(
       "WebRTC.Video.DelayedFramesToRenderer",
       num_delayed_decoded_frames_ * 100 / num_decoded_frames_);
   if (num_delayed_decoded_frames_ > 0) {
-    RTC_LOGGED_HISTOGRAM_COUNTS_1000(
+    RTC_HISTOGRAM_COUNTS_1000(
         "WebRTC.Video.DelayedFramesToRenderer_AvgDelayInMs",
         sum_missed_render_deadline_ms_ / num_delayed_decoded_frames_);
   }
@@ -156,6 +154,7 @@ void VCMTiming::UpdateCurrentDelay(uint32_t frame_timestamp) {
       max_change_ms = kDelayMaxChangeMsPerS *
                       (frame_timestamp - prev_frame_timestamp_) / 90000;
     }
+
     if (max_change_ms <= 0) {
       // Any changes less than 1 ms are truncated and
       // will be postponed. Negative change will be due
@@ -190,18 +189,18 @@ void VCMTiming::UpdateCurrentDelay(int64_t render_time_ms,
 int32_t VCMTiming::StopDecodeTimer(uint32_t time_stamp,
                                    int32_t decode_time_ms,
                                    int64_t now_ms,
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
                                    int current_endtoend_delay_ms,
-#endif
+#endif // WEBRTC_FEATURE_END_TO_END_DELAY
                                    int64_t render_time_ms) {
   CriticalSectionScoped cs(crit_sect_);
   codec_timer_->AddTiming(decode_time_ms, now_ms);
   assert(decode_time_ms >= 0);
   last_decode_ms_ = decode_time_ms;
 
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
   current_endtoend_delay_ms_ = current_endtoend_delay_ms;
-#endif
+#endif // WEBRTC_FEATURE_END_TO_END_DELAY
 
   // Update stats.
   ++num_decoded_frames_;
@@ -296,15 +295,15 @@ int VCMTiming::TargetDelayInternal() const {
                   jitter_delay_ms_ + RequiredDecodeTimeMs() + render_delay_ms_);
 }
 
-void VCMTiming::GetTimings(int* decode_ms,
+bool VCMTiming::GetTimings(int* decode_ms,
                            int* max_decode_ms,
                            int* current_delay_ms,
                            int* target_delay_ms,
                            int* jitter_buffer_ms,
                            int* min_playout_delay_ms,
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
                            int* current_endtoend_delay_ms,
-#endif
+#endif // WEBRTC_FEATURE_END_TO_END_DELAY
                            int* render_delay_ms) const {
   CriticalSectionScoped cs(crit_sect_);
   *decode_ms = last_decode_ms_;
@@ -313,10 +312,11 @@ void VCMTiming::GetTimings(int* decode_ms,
   *target_delay_ms = TargetDelayInternal();
   *jitter_buffer_ms = jitter_delay_ms_;
   *min_playout_delay_ms = min_playout_delay_ms_;
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
   *current_endtoend_delay_ms =  current_endtoend_delay_ms_,
-#endif
+#endif // WEBRTC_FEATURE_END_TO_END_DELAY
   *render_delay_ms = render_delay_ms_;
+  return (num_decoded_frames_ > 0);
 }
 
 }  // namespace webrtc

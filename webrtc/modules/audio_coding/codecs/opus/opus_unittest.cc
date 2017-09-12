@@ -11,20 +11,15 @@
 #include <memory>
 #include <string>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "webrtc/base/checks.h"
-#include "webrtc/modules/audio_coding/codecs/opus/opus_interface.h"
 #include "webrtc/modules/audio_coding/codecs/opus/opus_inst.h"
+#include "webrtc/modules/audio_coding/codecs/opus/opus_interface.h"
 #include "webrtc/modules/audio_coding/neteq/tools/audio_loop.h"
+#include "webrtc/test/gtest.h"
 #include "webrtc/test/testsupport/fileutils.h"
 
 namespace webrtc {
 
-// Namespace needed to resolve class name collision (OpusTest).
-// The other OpusTest class is in opus_test.cc of modules_test project
-#ifdef WINRT
-namespace unittest {
-#endif
 using test::AudioLoop;
 using ::testing::TestWithParam;
 using ::testing::Values;
@@ -414,6 +409,27 @@ TEST_P(OpusTest, OpusSetComplexity) {
   EXPECT_EQ(0, WebRtcOpus_EncoderFree(opus_encoder_));
 }
 
+TEST_P(OpusTest, OpusForceChannels) {
+  // Test without creating encoder memory.
+  EXPECT_EQ(-1, WebRtcOpus_SetForceChannels(opus_encoder_, 1));
+
+  ASSERT_EQ(0,
+            WebRtcOpus_EncoderCreate(&opus_encoder_, channels_, application_));
+
+  if (channels_ == 2) {
+    EXPECT_EQ(-1, WebRtcOpus_SetForceChannels(opus_encoder_, 3));
+    EXPECT_EQ(0, WebRtcOpus_SetForceChannels(opus_encoder_, 2));
+    EXPECT_EQ(0, WebRtcOpus_SetForceChannels(opus_encoder_, 1));
+    EXPECT_EQ(0, WebRtcOpus_SetForceChannels(opus_encoder_, 0));
+  } else {
+    EXPECT_EQ(-1, WebRtcOpus_SetForceChannels(opus_encoder_, 2));
+    EXPECT_EQ(0, WebRtcOpus_SetForceChannels(opus_encoder_, 1));
+    EXPECT_EQ(0, WebRtcOpus_SetForceChannels(opus_encoder_, 0));
+  }
+
+  EXPECT_EQ(0, WebRtcOpus_EncoderFree(opus_encoder_));
+}
+
 // Encode and decode one frame, initialize the decoder and
 // decode once more.
 TEST_P(OpusTest, OpusDecodeInit) {
@@ -682,7 +698,4 @@ INSTANTIATE_TEST_CASE_P(VariousMode,
                         OpusTest,
                         Combine(Values(1, 2), Values(0, 1)));
 
-#ifdef WINRT
-    }  // namespace unittest
-#endif
 }  // namespace webrtc

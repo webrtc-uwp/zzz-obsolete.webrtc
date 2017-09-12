@@ -48,7 +48,7 @@ int win32_inet_pton(int af, const char* src, void *dst);
 
 inline std::wstring ToUtf16(const char* utf8, size_t len) {
   int len16 = ::MultiByteToWideChar(CP_UTF8, 0, utf8, static_cast<int>(len),
-                                    NULL, 0);
+                                    nullptr, 0);
   wchar_t* ws = STACK_ARRAY(wchar_t, len16);
   ::MultiByteToWideChar(CP_UTF8, 0, utf8, static_cast<int>(len), ws, len16);
   return std::wstring(ws, len16);
@@ -60,10 +60,10 @@ inline std::wstring ToUtf16(const std::string& str) {
 
 inline std::string ToUtf8(const wchar_t* wide, size_t len) {
   int len8 = ::WideCharToMultiByte(CP_UTF8, 0, wide, static_cast<int>(len),
-                                   NULL, 0, NULL, NULL);
+                                   nullptr, 0, nullptr, nullptr);
   char* ns = STACK_ARRAY(char, len8);
   ::WideCharToMultiByte(CP_UTF8, 0, wide, static_cast<int>(len), ns, len8,
-                        NULL, NULL);
+                        nullptr, nullptr);
   return std::string(ns, len8);
 }
 
@@ -90,7 +90,7 @@ inline uint64_t ToUInt64(const FILETIME& ft) {
   return r.QuadPart;
 }
 
-#if defined(WINRT)
+#if defined(WINUWP)
 inline bool IsWindowsVistaOrLater() {
     return true;
 }
@@ -102,7 +102,7 @@ inline bool IsWindowsXpOrLater() {
 inline bool IsWindows8OrLater() {
     return true;
 }
-#else // defined(WINRT)
+#else // defined(WINUWP)
 enum WindowsMajorVersions {
   kWindows2000 = 5,
   kWindowsVista = 6,
@@ -111,25 +111,23 @@ bool GetOsVersion(int* major, int* minor, int* build);
 
 inline bool IsWindowsVistaOrLater() {
   int major;
-  return (GetOsVersion(&major, NULL, NULL) && major >= kWindowsVista);
+  return (GetOsVersion(&major, nullptr, nullptr) && major >= kWindowsVista);
 }
 
 inline bool IsWindowsXpOrLater() {
   int major, minor;
-  return (GetOsVersion(&major, &minor, NULL) &&
-          (major >= kWindowsVista ||
-          (major == kWindows2000 && minor >= 1)));
+  return (GetOsVersion(&major, &minor, nullptr) &&
+          (major >= kWindowsVista || (major == kWindows2000 && minor >= 1)));
 }
 
 inline bool IsWindows8OrLater() {
   int major, minor;
-  return (GetOsVersion(&major, &minor, NULL) &&
-          (major > kWindowsVista ||
-          (major == kWindowsVista && minor >= 2)));
+  return (GetOsVersion(&major, &minor, nullptr) &&
+          (major > kWindowsVista || (major == kWindowsVista && minor >= 2)));
 }
-#endif // defined(WINRT)
+#endif // defined(WINUWP)
 
-#if !defined(WINRT)
+#if !defined(WINUWP)
 // Determine the current integrity level of the process.
 bool GetCurrentProcessIntegrityLevel(int* level);
 
@@ -138,18 +136,15 @@ inline bool IsCurrentProcessLowIntegrity() {
   return (GetCurrentProcessIntegrityLevel(&level) &&
       level < SECURITY_MANDATORY_MEDIUM_RID);
 }
-#endif // !defined(WINRT)
+#else /* !defined(WINUWP) */
+inline bool IsCurrentProcessLowIntegrity() {
+  // Assume this is NOT a low integrity level run as application privileges
+  // can be requested in manifest as appropriate.
+  return false;
+}
+#endif // !defined(WINUWP)
 
 bool AdjustCurrentProcessPrivilege(const TCHAR* privilege, bool to_enable);
-
-#if defined(WINRT)
-// Some functions can be switch over to the ******Ex() version.
-#define InitializeCriticalSection(a) InitializeCriticalSectionEx(a, 0, 0)
-#undef CreateEvent
-#define CreateEvent(lpEventAttributes, bManualReset, bInitialState, lpName) CreateEventEx(lpEventAttributes, lpName, (bManualReset?CREATE_EVENT_MANUAL_RESET:0) | (bInitialState?CREATE_EVENT_INITIAL_SET:0), EVENT_ALL_ACCESS)
-#define WaitForSingleObject(a, b) WaitForSingleObjectEx(a, b, FALSE)
-#define WaitForMultipleObjects(a, b, c, d) WaitForMultipleObjectsEx(a, b, c, d, FALSE) 
-#endif // defined(WINRT)
 
 }  // namespace rtc
 

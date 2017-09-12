@@ -8,10 +8,9 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
-#include "testing/gtest/include/gtest/gtest.h"
-
 #include "webrtc/system_wrappers/include/metrics.h"
 #include "webrtc/system_wrappers/include/metrics_default.h"
+#include "webrtc/test/gtest.h"
 
 namespace webrtc {
 namespace {
@@ -45,9 +44,6 @@ TEST_F(MetricsTest, InitiallyNoSamples) {
   EXPECT_EQ(0, metrics::NumEvents("NonExisting", kSample));
 }
 
-// Disabled for WinRT because we can't link to the default and full
-// implementations in our single gtest_runner app.
-#if !defined(WINRT)
 TEST_F(MetricsTest, RtcHistogramPercent_AddSample) {
   const std::string kName = "Percentage";
   RTC_HISTOGRAM_PERCENTAGE(kName, kSample);
@@ -58,6 +54,14 @@ TEST_F(MetricsTest, RtcHistogramPercent_AddSample) {
 TEST_F(MetricsTest, RtcHistogramEnumeration_AddSample) {
   const std::string kName = "Enumeration";
   RTC_HISTOGRAM_ENUMERATION(kName, kSample, kSample + 1);
+  EXPECT_EQ(1, metrics::NumSamples(kName));
+  EXPECT_EQ(1, metrics::NumEvents(kName, kSample));
+}
+
+TEST_F(MetricsTest, RtcHistogramBoolean_AddSample) {
+  const std::string kName = "Boolean";
+  const int kSample = 0;
+  RTC_HISTOGRAM_BOOLEAN(kName, kSample);
   EXPECT_EQ(1, metrics::NumSamples(kName));
   EXPECT_EQ(1, metrics::NumEvents(kName, kSample));
 }
@@ -119,7 +123,5 @@ TEST_F(MetricsTest, RtcHistogram_FailsForNonConstantName) {
   EXPECT_DEATH(AddSample("NotConstantName1", kSample), "");
 }
 #endif
-
-#endif // !defined(WINRT)
 
 }  // namespace webrtc

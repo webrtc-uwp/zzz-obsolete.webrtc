@@ -14,16 +14,16 @@
 #include <queue>
 #include <vector>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "webrtc/base/checks.h"
 #include "webrtc/modules/video_coding/encoded_frame.h"
 #include "webrtc/modules/video_coding/packet.h"
 #include "webrtc/modules/video_coding/receiver.h"
 #include "webrtc/modules/video_coding/test/stream_generator.h"
-#include "webrtc/modules/video_coding/timing.h"
 #include "webrtc/modules/video_coding/test/test_util.h"
+#include "webrtc/modules/video_coding/timing.h"
 #include "webrtc/system_wrappers/include/clock.h"
 #include "webrtc/system_wrappers/include/critical_section_wrapper.h"
+#include "webrtc/test/gtest.h"
 
 namespace webrtc {
 
@@ -468,9 +468,9 @@ TEST_F(VCMReceiverTimingTest, FrameForDecodingPreferLateDecoding) {
   int max_decode_ms;
   int dummy;
   timing_.GetTimings(&dummy, &max_decode_ms, &dummy, &dummy, &dummy, &dummy,
-#ifdef WINRT
+#ifdef WEBRTC_FEATURE_END_TO_END_DELAY
                      &dummy,
-#endif
+#endif // WEBRTC_FEATURE_END_TO_END_DELAY
                      &render_delay_ms);
 
   // Construct test samples.

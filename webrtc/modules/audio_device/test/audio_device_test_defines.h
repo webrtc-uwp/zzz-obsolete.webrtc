@@ -13,7 +13,6 @@
 
 #include "webrtc/common_types.h"
 #include "webrtc/modules/audio_device/include/audio_device.h"
-#include "webrtc/modules/utility/include/process_thread.h"
 #include "webrtc/system_wrappers/include/trace.h"
 
 #ifdef _WIN32
@@ -29,7 +28,7 @@
 #define LOG_TAG "WebRtc ADM TEST"
 #define TEST_LOG(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define TEST_LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#elif defined(WINRT)
+#elif defined(WINUWP)
 #define TEST_LOG printf
 #define TEST_LOG_ERROR(...) fprintf(stderr, __VA_ARGS__)
 #define ADM_AUDIO_LAYER AudioDeviceModule::kWindowsWasapiAudio

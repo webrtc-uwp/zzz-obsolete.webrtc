@@ -10,11 +10,10 @@
 
 #include "webrtc/voice_engine/voe_base_impl.h"
 
+#include "webrtc/api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "webrtc/base/format_macros.h"
 #include "webrtc/base/logging.h"
-#include "webrtc/common.h"
 #include "webrtc/common_audio/signal_processing/include/signal_processing_library.h"
-#include "webrtc/modules/audio_coding/codecs/builtin_audio_decoder_factory.h"
 #include "webrtc/modules/audio_coding/include/audio_coding_module.h"
 #include "webrtc/modules/audio_device/audio_device_impl.h"
 #include "webrtc/modules/audio_processing/include/audio_processing.h"
@@ -195,14 +194,14 @@ int VoEBaseImpl::Init(
     return -1;
 #else
     // Create the internal ADM implementation.
-#if defined(WINRT)
-    // Use AudioDeviceModule::kWindowsWasapiAudio for WinRT
+#if defined(WINUWP)
+    // Use AudioDeviceModule::kWindowsWasapiAudio for WinUWP
     shared_->set_audio_device(AudioDeviceModuleImpl::Create(
         VoEId(shared_->instance_id(), -1), AudioDeviceModule::kWindowsWasapiAudio));
-#else // defined(WINRT)
+#else // defined(WINUWP)
     shared_->set_audio_device(AudioDeviceModule::Create(
         VoEId(shared_->instance_id(), -1), shared_->audio_device_layer()));
-#endif // defined(WINRT)
+#endif // defined(WINUWP)
 
     if (shared_->audio_device() == nullptr) {
       shared_->SetLastError(VE_NO_MEMORY, kTraceCritical,
@@ -361,25 +360,20 @@ int VoEBaseImpl::Terminate() {
 }
 
 int VoEBaseImpl::CreateChannel() {
-  rtc::CritScope cs(shared_->crit_sec());
-  if (!shared_->statistics().Initialized()) {
-    shared_->SetLastError(VE_NOT_INITED, kTraceError);
-    return -1;
-  }
-
-  voe::ChannelOwner channel_owner =
-      shared_->channel_manager().CreateChannel(decoder_factory_);
-  return InitializeChannel(&channel_owner);
+  return CreateChannel(ChannelConfig());
 }
 
-int VoEBaseImpl::CreateChannel(const Config& config) {
+int VoEBaseImpl::CreateChannel(const ChannelConfig& config) {
   rtc::CritScope cs(shared_->crit_sec());
   if (!shared_->statistics().Initialized()) {
     shared_->SetLastError(VE_NOT_INITED, kTraceError);
     return -1;
   }
+
+  ChannelConfig config_copy(config);
+  config_copy.acm_config.decoder_factory = decoder_factory_;
   voe::ChannelOwner channel_owner =
-      shared_->channel_manager().CreateChannel(config, decoder_factory_);
+      shared_->channel_manager().CreateChannel(config_copy);
   return InitializeChannel(&channel_owner);
 }
 
@@ -448,23 +442,7 @@ int VoEBaseImpl::StartReceive(int channel) {
                           "StartReceive() failed to locate channel");
     return -1;
   }
-  return channelPtr->StartReceiving();
-}
-
-int VoEBaseImpl::StopReceive(int channel) {
-  rtc::CritScope cs(shared_->crit_sec());
-  if (!shared_->statistics().Initialized()) {
-    shared_->SetLastError(VE_NOT_INITED, kTraceError);
-    return -1;
-  }
-  voe::ChannelOwner ch = shared_->channel_manager().GetChannel(channel);
-  voe::Channel* channelPtr = ch.channel();
-  if (channelPtr == nullptr) {
-    shared_->SetLastError(VE_CHANNEL_NOT_VALID, kTraceError,
-                          "SetLocalReceiver() failed to locate channel");
-    return -1;
-  }
-  return channelPtr->StopReceiving();
+  return 0;
 }
 
 int VoEBaseImpl::StartPlayout(int channel) {
@@ -562,7 +540,7 @@ int VoEBaseImpl::GetVersion(char version[1024]) {
   }
 
   std::string versionString = VoiceEngine::GetVersionString();
-  RTC_DCHECK_GT(1024u, versionString.size() + 1);
+  RTC_DCHECK_GT(1024, versionString.size() + 1);
   char* end = std::copy(versionString.cbegin(), versionString.cend(), version);
   end[0] = '\n';
   end[1] = '\0';

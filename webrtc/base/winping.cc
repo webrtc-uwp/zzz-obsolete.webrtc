@@ -10,13 +10,12 @@
 
 #include "webrtc/base/winping.h"
 
-#include <assert.h>
 #include <Iphlpapi.h>
 
 #include <algorithm>
 
 #include "webrtc/base/byteorder.h"
-#include "webrtc/base/common.h"
+#include "webrtc/base/checks.h"
 #include "webrtc/base/ipaddress.h"
 #include "webrtc/base/logging.h"
 #include "webrtc/base/nethelpers.h"
@@ -150,9 +149,9 @@ WinPing::WinPing()
       create6_(0), send6_(0), data_(0), dlen_(0), reply_(0),
       rlen_(0), valid_(false) {
 
-  // ICMP pings are not supported on WinRT.  Might need to use raw sockets.
-  // However, raw sockets usually require elevation, currently not supported in WinRT yet.
-#if !defined(WINRT)
+  // ICMP pings are not supported on WinUWP.  Might need to use raw sockets.
+  // However, raw sockets usually require elevation, currently not supported in WinUWP yet.
+#if !defined(WINUWP)
   dll_ = LoadLibraryA(ICMP_DLL_NAME);
 #endif
   if (!dll_) {
@@ -222,7 +221,7 @@ WinPing::PingResult WinPing::Ping(IPAddress ip,
     return PING_INVALID_PARAMS;
   }
 
-  assert(IsValid());
+  RTC_DCHECK(IsValid());
 
   IP_OPTION_INFORMATION ipopt;
   memset(&ipopt, 0, sizeof(ipopt));
@@ -254,7 +253,7 @@ WinPing::PingResult WinPing::Ping(IPAddress ip,
     src.sin6_family = AF_INET6;
     dst.sin6_family = AF_INET6;
     dst.sin6_addr = ip.ipv6_address();
-    result = send6_(hping6_, NULL, NULL, NULL, &src, &dst, data_,
+    result = send6_(hping6_, nullptr, nullptr, nullptr, &src, &dst, data_,
                     int16_t(data_size), &ipopt, reply_, reply_size, timeout);
   }
   if (result == 0) {
@@ -335,7 +334,7 @@ WinPing::PingResult WinPing::Ping(IPAddress ip,
 //     RequestSize          - The number of bytes in the request data buffer.
 //
 //     RequestOptions       - Pointer to the IP header options for the request.
-//                            May be NULL.
+//                            May be null.
 //
 //     ReplyBuffer          - A buffer to hold any replies to the request.
 //                            On return, the buffer will contain an array of

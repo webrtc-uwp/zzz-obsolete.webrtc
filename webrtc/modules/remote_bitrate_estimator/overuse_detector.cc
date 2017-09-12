@@ -18,7 +18,6 @@
 #include <string>
 
 #include "webrtc/base/checks.h"
-#include "webrtc/base/common.h"
 #include "webrtc/base/logging.h"
 #include "webrtc/modules/remote_bitrate_estimator/include/bwe_defines.h"
 #include "webrtc/modules/remote_bitrate_estimator/test/bwe_test_logging.h"
@@ -36,10 +35,11 @@ const size_t kDisabledPrefixLength = sizeof(kDisabledPrefix) - 1;
 
 const double kMaxAdaptOffsetMs = 15.0;
 const double kOverUsingTimeThreshold = 10;
+const int kMinNumDeltas = 60;
 
 bool AdaptiveThresholdExperimentIsDisabled() {
-#ifdef WINRT
-    // Don't use the Adaptive Threshold on WinRT.
+#ifdef WINUWP
+    // Don't use the Adaptive Threshold on WinUWP.
     return true;
 #endif
 
@@ -64,24 +64,22 @@ bool ReadExperimentConstants(double* k_up, double* k_down) {
                 "%lf,%lf", k_up, k_down) == 2;
 }
 
-OveruseDetector::OveruseDetector(const OverUseDetectorOptions& options)
+OveruseDetector::OveruseDetector()
     // Experiment is on by default, but can be disabled with finch by setting
     // the field trial string to "WebRTC-AdaptiveBweThreshold/Disabled/".
     : in_experiment_(!AdaptiveThresholdExperimentIsDisabled()),
       k_up_(0.0087),
       k_down_(0.039),
-#ifdef WINRT
+#ifdef WINUWP
       // When being CPU bounds (like low level Windows Phone), the overuse_estimator/detector will detect that 
       // some offsets between timestamp and time of arrival, which could be 
       // interpreted as bandwidth limitation. Relax the overuse_detection threshold
       overusing_time_threshold_(1000),
-      options_(options),
       threshold_(250.0),
-#else // WINRT
+#else // WINUWP
       overusing_time_threshold_(100),
-      options_(options),
       threshold_(12.5),
-#endif // WINRT
+#endif // WINUWP
       last_update_ms_(-1),
       prev_offset_(0.0),
       time_over_using_(-1),
@@ -104,11 +102,9 @@ BandwidthUsage OveruseDetector::Detect(double offset,
   if (num_of_deltas < 2) {
     return kBwNormal;
   }
-  const double prev_offset = prev_offset_;
-  prev_offset_ = offset;
-  const double T = std::min(num_of_deltas, 60) * offset;
-  BWE_TEST_LOGGING_PLOT(1, "offset", now_ms, T);
-  BWE_TEST_LOGGING_PLOT(1, "threshold", now_ms, threshold_);
+  const double T = std::min(num_of_deltas, kMinNumDeltas) * offset;
+  BWE_TEST_LOGGING_PLOT(1, "offset_ms#1", now_ms, offset);
+  BWE_TEST_LOGGING_PLOT(1, "gamma_ms#1", now_ms, threshold_ / kMinNumDeltas);
   if (T > threshold_) {
     if (time_over_using_ == -1) {
       // Initialize the timer. Assume that we've been
@@ -121,7 +117,7 @@ BandwidthUsage OveruseDetector::Detect(double offset,
     }
     overuse_counter_++;
     if (time_over_using_ > overusing_time_threshold_ && overuse_counter_ > 1) {
-      if (offset >= prev_offset) {
+      if (offset >= prev_offset_) {
         time_over_using_ = 0;
         overuse_counter_ = 0;
         hypothesis_ = kBwOverusing;
@@ -136,6 +132,7 @@ BandwidthUsage OveruseDetector::Detect(double offset,
     overuse_counter_ = 0;
     hypothesis_ = kBwNormal;
   }
+  prev_offset_ = offset;
 
   UpdateThreshold(T, now_ms);
 

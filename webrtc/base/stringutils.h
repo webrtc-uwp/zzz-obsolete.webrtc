@@ -32,8 +32,6 @@
 
 #include <string>
 
-#include "webrtc/base/basictypes.h"
-
 ///////////////////////////////////////////////////////////////////////////////
 // Generic string/memory utilities
 ///////////////////////////////////////////////////////////////////////////////
@@ -95,11 +93,7 @@ inline const wchar_t* strstr(const wchar_t* haystack, const wchar_t* needle) {
 }
 #ifndef vsnprintf
 inline int vsnprintf(wchar_t* buf, size_t n, const wchar_t* fmt, va_list args) {
-#if defined(WINRT)
-  return _vsnwprintf_s(buf, n, _TRUNCATE, fmt, args);
-#else // defined(WINRT)
   return _vsnwprintf(buf, n, fmt, args);
-#endif // defined(WINRT)
 }
 #endif // !vsnprintf
 inline unsigned long strtoul(const wchar_t* snum, wchar_t** end, int base) {
@@ -142,8 +136,8 @@ struct Traits {
 // String utilities which work with char or wchar_t
 ///////////////////////////////////////////////////////////////////////////////
 
-template<class CTYPE>
-inline const CTYPE* nonnull(const CTYPE* str, const CTYPE* def_str = NULL) {
+template <class CTYPE>
+inline const CTYPE* nonnull(const CTYPE* str, const CTYPE* def_str = nullptr) {
   return str ? str : (def_str ? def_str : Traits<CTYPE>::empty_str());
 }
 

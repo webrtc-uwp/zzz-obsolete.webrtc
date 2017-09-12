@@ -19,9 +19,7 @@
 #include "webrtc/base/socketfactory.h"
 #include "webrtc/base/socket.h"
 #include "webrtc/base/thread.h"
-#if !defined(WINRT)
 #include "webrtc/base/win32window.h"
-#endif
 
 namespace rtc {
 
@@ -145,7 +143,7 @@ class Win32Thread : public Thread {
   }
   virtual ~Win32Thread() {
     Stop();
-    set_socketserver(NULL);
+    set_socketserver(nullptr);
   }
   virtual void Run() {
     id_ = GetCurrentThreadId();
