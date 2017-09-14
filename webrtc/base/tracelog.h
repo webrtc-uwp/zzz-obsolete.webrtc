@@ -6,8 +6,8 @@
 #include <vector>
 #include <memory>
 
-#include "webrtc/base/sigslot.h"
-#include "webrtc/base/criticalsection.h"
+#include "webrtc/rtc_base/sigslot.h"
+#include "webrtc/rtc_base/criticalsection.h"
 
 namespace rtc {
 class AsyncSocket;

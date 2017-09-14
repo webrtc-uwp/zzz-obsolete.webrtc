@@ -219,18 +219,6 @@ if (rtc_include_tests) {
         "voice_engine_fixture.h",
       ]
 
-    sources = [
-      "channel_unittest.cc",
-      "file_player_unittests.cc",
-      "transport_feedback_packet_loss_tracker_unittest.cc",
-      "utility_unittest.cc",
-      "voe_base_unittest.cc",
-      "voe_codec_unittest.cc",
-      "voe_network_unittest.cc",
-      "voice_engine_fixture.cc",
-      "voice_engine_fixture.h",
-    ]
-
     data = [
       "../../resources/utility/encapsulated_pcm16b_8khz.wav",
       "../../resources/utility/encapsulated_pcmu_8khz.wav",
@@ -246,10 +234,6 @@ if (rtc_include_tests) {
         # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
         suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
       }
-    }
-
-    rtc_executable("voe_cmd_test") {
-      testonly = true
 
   if (!is_ios) {
     rtc_executable("voe_auto_test") {
