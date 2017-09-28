@@ -828,9 +828,6 @@ class FakeVoiceEngine : public FakeBaseEngine {
 
   void StopRtcEventLog() {}
 
-  webrtc::VoEHardware* GetVoEHardware() {
-      return nullptr;
-  }
  private:
   std::vector<FakeVoiceMediaChannel*> channels_;
   std::vector<AudioCodec> codecs_;

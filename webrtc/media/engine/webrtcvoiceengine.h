@@ -73,7 +73,7 @@ class WebRtcVoiceEngine final : public webrtc::TraceCallback  {
   void Init();
 
   rtc::scoped_refptr<webrtc::AudioState> GetAudioState() const;
-  webrtc::VoEHardware* GetVoEHardware() { return voe()->hw(); }
+  
   VoiceMediaChannel* CreateChannel(webrtc::Call* call,
                                    const MediaConfig& config,
                                    const AudioOptions& options);

@@ -175,11 +175,6 @@ H264SpsPpsTracker::PacketAction H264SpsPpsTracker::CopyAndFixBitstream(
     memcpy(insert_at, data, data_size);
   }
 
-  if (sps_id != -1) {
-    packet->width = sps_data_[sps_id].width;
-    packet->height = sps_data_[sps_id].height;
-  }
-
   packet->dataPtr = buffer;
   packet->sizeBytes = required_size;
   return kInsert;

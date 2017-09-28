@@ -36,7 +36,6 @@ class AudioDeviceModule;
 class AudioMixer;
 class AudioProcessing;
 class Call;
-class VoEHardware;
 }
 
 namespace cricket {
@@ -70,8 +69,6 @@ class MediaEngineInterface {
       webrtc::Call* call,
       const MediaConfig& config,
       const VideoOptions& options) = 0;
-
-  virtual webrtc::VoEHardware* GetVoEHardware() = 0;
 
   // Gets the current microphone level, as a value between 0 and 10.
   virtual int GetInputLevel() = 0;
@@ -172,10 +169,6 @@ class CompositeMediaEngine : public MediaEngineInterface {
 
   virtual void StopAecDump() {
     voice_.StopAecDump();
-  }
-
-  virtual webrtc::VoEHardware* GetVoEHardware() {
-    return voice_.GetVoEHardware();
   }
 
  protected:

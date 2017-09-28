@@ -74,7 +74,7 @@ struct CodecSpecificInfoH264 {
 };
 
 union CodecSpecificInfoUnion {
-  CodecSpecificInfoGeneric genericCodec;
+  CodecSpecificInfoGeneric generic;
   CodecSpecificInfoVP8 VP8;
   CodecSpecificInfoVP9 VP9;
   CodecSpecificInfoH264 H264;
