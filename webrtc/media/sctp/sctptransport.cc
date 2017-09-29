@@ -95,8 +95,21 @@ std::string ListFlags(int flags) {
   std::stringstream result;
   bool first = true;
 // Skip past the first 12 chars (strlen("SCTP_STREAM_"))
+#ifdef WINUWP
 #define MAKEFLAG(X) \
-  { X, const_cast<char *>(#X) + 12 }
+  { X, #X + 12 }
+  struct flaginfo_t {
+    int value;
+    Platform::String^ name;
+  } flaginfo[] = {MAKEFLAG(SCTP_STREAM_RESET_INCOMING_SSN),
+                  MAKEFLAG(SCTP_STREAM_RESET_OUTGOING_SSN),
+                  MAKEFLAG(SCTP_STREAM_RESET_DENIED),
+                  MAKEFLAG(SCTP_STREAM_RESET_FAILED),
+                  MAKEFLAG(SCTP_STREAM_CHANGE_DENIED)};
+#undef MAKEFLAG
+#else
+#define MAKEFLAG(X) \
+  { X, #X + 12 }
   struct flaginfo_t {
     int value;
     const char* name;
@@ -106,11 +119,18 @@ std::string ListFlags(int flags) {
                   MAKEFLAG(SCTP_STREAM_RESET_FAILED),
                   MAKEFLAG(SCTP_STREAM_CHANGE_DENIED)};
 #undef MAKEFLAG
+#endif
   for (uint32_t i = 0; i < arraysize(flaginfo); ++i) {
     if (flags & flaginfo[i].value) {
       if (!first)
         result << " | ";
+#ifdef WINUWP
+      std::wstring nameW(flaginfo[i].name->Data());
+      std::string nameA(nameW.begin(), nameW.end());
+      result << nameA;
+#else
       result << flaginfo[i].name;
+#endif
       first = false;
     }
   }
