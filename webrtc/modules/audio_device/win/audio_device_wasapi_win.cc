@@ -778,7 +778,10 @@ AudioDeviceWindowsWasapi::AudioDeviceWindowsWasapi(const int32_t id) :
     _outputDeviceRole(AudioDeviceRole::Communications),
     _inputDeviceIndex(0),
     _outputDeviceIndex(0),
-    _newMicLevel(0) {
+    _newMicLevel(0),
+	_decibelFullscaleCallback(nullptr),
+	_decibelCalculatePeriod(25),
+	_manualAudioRecordingControl(false){
     WEBRTC_TRACE(kTraceMemory, kTraceAudioDevice, id, "%s created",
       __FUNCTION__);
     // Create our samples ready events - we want auto reset events that start
@@ -2759,13 +2762,29 @@ Exit:
   return -1;
 }
 
+void AudioDeviceWindowsWasapi::SetManualRecordingControl(bool manualRecordingControl){ 
+	CriticalSectionScoped critScoped(&_recordingControlMutex);
+	_manualAudioRecordingControl = manualRecordingControl;
+};
+
 // ----------------------------------------------------------------------------
 //  StartRecording
 // ----------------------------------------------------------------------------
 
 int32_t AudioDeviceWindowsWasapi::StartRecording() {
   CriticalSectionScoped critScoped(&_recordingControlMutex);
-  return StartRecordingInternal();
+  if (!_manualAudioRecordingControl) {
+	  return StartRecordingInternal();
+  }
+  else {
+	  return 0;
+  }
+}
+
+int32_t AudioDeviceWindowsWasapi::StartRecordingManual()
+{
+	CriticalSectionScoped critScoped(&_recordingControlMutex);
+	return StartRecordingInternal();
 }
 
 int32_t AudioDeviceWindowsWasapi::StartRecordingInternal() {
@@ -2852,7 +2871,18 @@ int32_t AudioDeviceWindowsWasapi::StartRecordingInternal() {
 
 int32_t AudioDeviceWindowsWasapi::StopRecording() {
   CriticalSectionScoped critScoped(&_recordingControlMutex);
-  return StopRecordingInternal();
+  if (!_manualAudioRecordingControl) {
+	  return StopRecordingInternal();
+  }
+  else {
+	  return 0;
+  }
+}
+
+int32_t AudioDeviceWindowsWasapi::StopRecordingManual()
+{
+	CriticalSectionScoped critScoped(&_recordingControlMutex);
+	return StopRecordingInternal();
 }
 
 int32_t AudioDeviceWindowsWasapi::StopRecordingInternal() {
@@ -3716,6 +3746,7 @@ DWORD AudioDeviceWindowsWasapi::DoCaptureThread() {
   UINT32 syncBufIndex = 0;
 
   _readSamples = 0;
+  size_t samplesCounter = 0;
 
   // Initialize COM as MTA in this thread.
   ScopedCOMInitializer comInit(ScopedCOMInitializer::kMTA);
@@ -3895,12 +3926,15 @@ DWORD AudioDeviceWindowsWasapi::DoCaptureThread() {
           static_cast<uint32_t>(_sndCardPlayDelay);
 
         _sndCardRecDelay = sndCardRecDelay;
-
+		
         while (syncBufIndex >= _recBlockSize) {
           if (_ptrAudioBuffer) {
             _ptrAudioBuffer->SetRecordedBuffer((const int8_t*)syncBuffer,
               _recBlockSize);
-
+			if ((samplesCounter % _decibelCalculatePeriod == 0) && _decibelFullscaleCallback) {
+				CalculateDecibelFullScale(syncBuffer, _recBlockSize);
+			}
+			samplesCounter++;
             _driftAccumulator += _sampleDriftAt48kHz;
             const int32_t clockDrift =
               static_cast<int32_t>(_driftAccumulator);
@@ -5044,6 +5078,51 @@ void AudioDeviceWindowsWasapi::DefaultAudioRenderDeviceChanged(
   }
   LOG(LS_INFO) << "Default audio render device changed, restarting renderer!";
   SetEvent(_hRestartRenderEvent);
+}
+
+void AudioDeviceWindowsWasapi::RegisterGetDecibelFullScaleCallback(std::function<void(double)> callback, size_t decibelComputePeriodIn10ms)
+{
+	if (decibelComputePeriodIn10ms == 0) {
+		decibelComputePeriodIn10ms = 1;
+		LOG(LS_ERROR) << "DecibelFullScale compute period can not be zero (to prevent modulo zero), seting in to 10 ms which is the lowes possible value.";
+	}
+	_decibelFullscaleCallback = callback;
+	_decibelCalculatePeriod = decibelComputePeriodIn10ms;
+}
+
+void AudioDeviceWindowsWasapi::UnRegisterGetDecibelFullScaleCallback()
+{
+	_decibelFullscaleCallback = nullptr;
+}
+
+// This method is called every 1/4 second.
+// Because measured values oscilated a lot, it was needed to smooth values 
+// using low pass filter from 
+// https://en.wikipedia.org/wiki/Low-pass_filter#Discrete-time_realization
+void AudioDeviceWindowsWasapi::CalculateDecibelFullScale(const void* audioSamples, size_t samplesPerChannel) {
+	const double LOWPASSFILTERTIMESLICE = 0.5;
+	const int16_t* samples = static_cast<const int16_t*> (audioSamples);
+	int32_t sum = 0;
+	size_t numOfValues = samplesPerChannel * _recChannels;
+
+	double previousFilteredValueOfSampleAmplitude = 1.0f;
+	double currentFilteredValueOfSampleAmplitude;
+	for (size_t i = 0; i < numOfValues; i++) {
+		double absoluteValueOfSampleAmplitude = std::abs(samples[i]);
+		currentFilteredValueOfSampleAmplitude =
+			LOWPASSFILTERTIMESLICE * absoluteValueOfSampleAmplitude
+			+ (1.0 - LOWPASSFILTERTIMESLICE) * previousFilteredValueOfSampleAmplitude;
+
+		previousFilteredValueOfSampleAmplitude = currentFilteredValueOfSampleAmplitude;
+		sum += currentFilteredValueOfSampleAmplitude;
+	}
+	int16_t average = static_cast<int16_t> (sum / numOfValues);
+
+	double relativeAverage = average / (double)INT16_MAX;
+	_decibelFullScale = 20.0 * std::log10(relativeAverage);
+	if (_decibelFullscaleCallback) {
+		_decibelFullscaleCallback(_decibelFullScale);
+	}
 }
 
 }  // namespace webrtc

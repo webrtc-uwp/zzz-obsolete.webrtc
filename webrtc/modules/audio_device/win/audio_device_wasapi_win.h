@@ -257,6 +257,28 @@ public:
  public:
     virtual void AttachAudioBuffer(AudioDeviceBuffer* audioBuffer);
 
+	// Methods for manual control of audio recording
+  public:
+	  void SetManualRecordingControl(bool manualRecordingControl);
+	  int32_t StartRecordingManual();
+	  int32_t StopRecordingManual();
+  private:
+	  // This variable is used for manual control of start and stop audio recording. 
+	  // E.g. you want to calculate decibel fullscale even in nobody is connected,
+	  // but you want to send push notificatin that noise level exceded treshold.
+	  // By default is set to false.
+	bool _manualAudioRecordingControl; 
+
+    // Methods related to calculate decibel full scale
+ public:
+	void RegisterGetDecibelFullScaleCallback(std::function<void(double)> callback, size_t decibelComputePeriodIn10ms);
+	void UnRegisterGetDecibelFullScaleCallback();
+  private:
+	  std::function<void(double)> _decibelFullscaleCallback;
+	  void CalculateDecibelFullScale(const void* audioSamples, size_t samplesPerChannel);
+	  double _decibelFullScale; // https://en.wikipedia.org/wiki/DBFS
+	  size_t _decibelCalculatePeriod; // Unit is one captured frame which is aproximetly every 10ms
+
  private:
     bool KeyPressed() const;
 
