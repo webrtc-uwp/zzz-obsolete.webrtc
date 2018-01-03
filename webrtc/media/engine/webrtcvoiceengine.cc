@@ -940,10 +940,12 @@ void WebRtcVoiceEngine::SetDefaultDevices() {
                << ") and speaker to (id=" << out_id << ")";
 
   bool ret = true;
+#if 0
   if (voe_wrapper_->hw()->SetRecordingDevice(in_id) == -1) {
     LOG_RTCERR1(SetRecordingDevice, in_id);
     ret = false;
   }
+#endif //0
 
   apm()->Initialize();
 
