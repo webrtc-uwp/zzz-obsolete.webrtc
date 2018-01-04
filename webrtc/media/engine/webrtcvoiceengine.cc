@@ -911,10 +911,12 @@ void WebRtcVoiceEngine::SetDefaultDevices() {
                << ") and speaker to (id=" << out_id << ")";
 
   bool ret = true;
+#if 0  
   if (voe_wrapper_->hw()->SetRecordingDevice(in_id) == -1) {
     LOG_RTCERR1(SetRecordingDevice, in_id);
     ret = false;
   }
+#endif
   webrtc::AudioProcessing* ap = voe()->base()->audio_processing();
   if (ap) {
     ap->Initialize();
