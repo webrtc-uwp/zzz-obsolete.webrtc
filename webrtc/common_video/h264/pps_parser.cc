@@ -71,8 +71,8 @@ rtc::Optional<PpsParser::PpsState> PpsParser::ParseInternal(
   uint32_t entropy_coding_mode_flag;
   RETURN_EMPTY_ON_FAIL(bit_buffer->ReadBits(&entropy_coding_mode_flag, 1));
   // TODO(pbos): Implement CABAC support if spotted in the wild.
-  RTC_CHECK(entropy_coding_mode_flag == 0)
-      << "Don't know how to parse CABAC streams.";
+  //RTC_CHECK(entropy_coding_mode_flag == 0)
+  //    << "Don't know how to parse CABAC streams.";
   // bottom_field_pic_order_in_frame_present_flag: u(1)
   uint32_t bottom_field_pic_order_in_frame_present_flag;
   RETURN_EMPTY_ON_FAIL(
