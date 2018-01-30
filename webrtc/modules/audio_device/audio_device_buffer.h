@@ -140,6 +140,7 @@ class AudioDeviceBuffer {
   // |play_bytes_per_10ms_| and the buffer is allocated in InitPlayout() on the
   // main/creating thread.
   std::unique_ptr<int8_t[]> play_buffer_;
+  std::atomic<bool> reset_play_buffer_ {};
 
   // AGC parameters.
   uint32_t current_mic_level_;

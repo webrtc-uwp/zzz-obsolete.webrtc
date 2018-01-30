@@ -126,6 +126,7 @@ int32_t AudioDeviceBuffer::SetPlayoutSampleRate(uint32_t fsHz) {
   LOG(INFO) << "SetPlayoutSampleRate(" << fsHz << ")";
   rtc::CritScope lock(&_critSect);
   play_sample_rate_ = fsHz;
+  reset_play_buffer_ = true;
   return 0;
 }
 
@@ -348,7 +349,7 @@ int32_t AudioDeviceBuffer::GetPlayoutData(void* audio_buffer) {
 
 void AudioDeviceBuffer::AllocatePlayoutBufferIfNeeded() {
   RTC_CHECK(play_bytes_per_sample_);
-  if (play_buffer_)
+  if ((play_buffer_) && (!reset_play_buffer_))
     return;
   LOG(INFO) << __FUNCTION__;
   rtc::CritScope lock(&_critSect);
@@ -360,6 +361,7 @@ void AudioDeviceBuffer::AllocatePlayoutBufferIfNeeded() {
   // Allocate memory for the playout audio buffer. It will always contain audio
   // samples corresponding to 10ms of audio to be played out.
   play_buffer_.reset(new int8_t[play_bytes_per_10ms_]);
+  reset_play_buffer_ = false;
 }
 
 void AudioDeviceBuffer::AllocateRecordingBufferIfNeeded() {
