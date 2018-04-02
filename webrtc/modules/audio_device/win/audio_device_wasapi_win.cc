@@ -516,7 +516,10 @@ HRESULT AudioInterfaceActivator::ActivateCompleted(
           "_playBlockSize     : %d", m_AudioDevice->_playBlockSize);
         WEBRTC_TRACE(kTraceInfo, kTraceAudioDevice, m_AudioDevice->_id,
           "_playChannels      : %d", m_AudioDevice->_playChannels);
-      } else {
+
+		// Set the flag not to enable upmix
+		m_AudioDevice->_enableUpmix = false;
+	  } else {
         // IsFormatSupported failed, device is probably in surround mode.
         // Firstly generate mix format to initialize media engine
         WAVEFORMATEX *WfxMix = m_AudioDevice->GenerateMixFormatForMediaEngine(mixFormat);
