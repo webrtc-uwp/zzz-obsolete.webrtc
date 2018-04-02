@@ -221,7 +221,7 @@ HRESULT AudioInterfaceActivator::ActivateCompleted(
       AudioClientProperties prop = { 0 };
       prop.cbSize = sizeof(AudioClientProperties);
       prop.bIsOffload = 0;
-      prop.eCategory = AudioCategory_Communications;
+      prop.eCategory = AudioCategory_Media;
       prop.Options = AUDCLNT_STREAMOPTIONS_NONE;
       hr = audioClient->SetClientProperties(&prop);
 
@@ -404,7 +404,7 @@ HRESULT AudioInterfaceActivator::ActivateCompleted(
       AudioClientProperties prop = { 0 };
       prop.cbSize = sizeof(AudioClientProperties);
       prop.bIsOffload = 0;
-      prop.eCategory = AudioCategory_Communications;
+      prop.eCategory = AudioCategory_Media;
       prop.Options = AUDCLNT_STREAMOPTIONS_NONE;
       hr = audioClient->SetClientProperties(&prop);
 
